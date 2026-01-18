@@ -362,12 +362,20 @@ export default function Home() {
             const token = await getToken();
             console.log('[SOCKET_INFO] Initializing connection...', { hasToken: !!token, sessionId });
 
-            // Dynamically determine the socket URL (defaults to current origin for ngrok/production)
-            const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
-            console.log('[SOCKET_INFO] Socket URL:', socketUrl);
+            // Dynamically determine the socket URL
+            // If the env variable is 'localhost' but we are on a production domain, use window.location.origin
+            const isLocalEnv = process.env.NEXT_PUBLIC_SOCKET_URL?.includes('localhost');
+            const socketUrl = (!isLocalEnv && process.env.NEXT_PUBLIC_SOCKET_URL)
+                ? process.env.NEXT_PUBLIC_SOCKET_URL
+                : (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+
+            console.log('[SOCKET_INFO] Connecting to:', socketUrl);
 
             socketIo = io(socketUrl, {
-                auth: { token, sessionId }
+                auth: { token, sessionId },
+                transports: ['websocket'], // Force websocket for performance and proxy compatibility
+                reconnection: true,
+                reconnectionAttempts: 5
             });
 
             setSocket(socketIo);
