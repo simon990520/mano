@@ -109,6 +109,7 @@ export default function Home() {
     const [gameMode, setGameMode] = useState<'casual' | 'ranked'>('casual');
     const [rp, setRp] = useState<number>(0);
     const [rankName, setRankName] = useState<string>('BRONCE');
+    const [turnTimer, setTurnTimer] = useState<number>(3);
 
     const RANKS = [
         { id: 'BRONCE', name: 'BRONCE', icon: '🥉', color: '#cd7f32', minRp: 0, maxRp: 100, stake: 1 },
@@ -300,6 +301,17 @@ export default function Home() {
         return () => cancelAnimationFrame(frameId);
     }, []);
 
+    // Turn Timer Decrement
+    useEffect(() => {
+        let timerId: NodeJS.Timeout;
+        if (gameState === 'playing' && turnTimer > 0 && !choiceMade) {
+            timerId = setInterval(() => {
+                setTurnTimer(prev => Math.max(0, prev - 0.1));
+            }, 100);
+        }
+        return () => clearInterval(timerId);
+    }, [gameState, turnTimer, choiceMade]);
+
     const { getToken, sessionId } = useAuth();
 
     const checkProfile = async () => {
@@ -468,6 +480,7 @@ export default function Home() {
                 setOpponentChoice(null);
                 setRoundWinner(null);
                 setShowCollision(false);
+                setTurnTimer(3);
                 playSound('/sounds/sfx/fight.mp3');
             });
 
@@ -624,6 +637,12 @@ export default function Home() {
                 setGameState('gameOver');
                 setRematchStatus('Opponent disconnected!');
                 setRematchRequested(false);
+            });
+
+            socketIo.on('roomRefunded', (data: { reason: string }) => {
+                alert(data.reason);
+                checkProfile(); // Update balances
+                setGameState('lobby');
             });
 
             socketIo.on('opponentLeft', () => {
@@ -1005,8 +1024,31 @@ export default function Home() {
                 {(gameState === 'playing' || gameState === 'roundResult' || gameState === 'gameOver') && (
                     <div className="top-info-bar" style={{ animation: 'fadeIn 0.2s ease-out' }}>
                         {currentMatchStake && (
-                            <div className="stake-badge">
-                                APUESTA: {currentMatchStake * 2} {gameMode === 'casual' ? '🪙' : '💎'}
+                            <div
+                                className="stake-badge"
+                                style={{
+                                    position: 'relative',
+                                    overflow: 'hidden',
+                                    background: gameState === 'playing' ? 'rgba(0,0,0,0.3)' : undefined
+                                }}
+                            >
+                                {gameState === 'playing' && (
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            height: '100%',
+                                            width: `${(turnTimer / 3) * 100}%`,
+                                            background: 'linear-gradient(90deg, #ffd700, #ff8c00)',
+                                            transition: 'width 0.1s linear',
+                                            zIndex: 0
+                                        }}
+                                    />
+                                )}
+                                <span style={{ position: 'relative', zIndex: 1 }}>
+                                    APUESTA: {currentMatchStake * 2} {gameMode === 'casual' ? '🪙' : '💎'}
+                                </span>
                             </div>
                         )}
                         {gameState === 'playing' && (

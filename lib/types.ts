@@ -16,6 +16,9 @@ export interface GameRoom {
     state: GameState;
     countdown: number;
     winner: string | null;
+    rematchRequested: false;
+    rematchRequestedBy: string | null;
+    inactivityTies: number;
 }
 
 export interface RoundResult {
@@ -24,6 +27,7 @@ export interface RoundResult {
     winner: 'player' | 'opponent' | 'tie';
     playerScore: number;
     opponentScore: number;
+    timeout?: boolean;
 }
 
 export interface GameOverData {

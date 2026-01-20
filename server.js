@@ -71,7 +71,9 @@ function createRoom(player1, player2) {
         countdown: 3,
         winner: null,
         rematchRequested: false,
-        rematchRequestedBy: null
+        rematchRequestedBy: null,
+        inactivityTies: 0,
+        roundTimeout: null
     };
 }
 
@@ -546,11 +548,22 @@ app.prepare().then(() => {
                 clearInterval(countdownInterval);
                 room.state = 'playing';
                 io.to(roomId).emit('roundStart', room.round);
+
+                // Start Round Timeout (3.5s for 3s UI display + latency)
+                if (room.roundTimeout) clearTimeout(room.roundTimeout);
+                room.roundTimeout = setTimeout(() => {
+                    handleRoundTimeout(room.id, room.round);
+                }, 4000);
             }
         }, 1000);
     }
 
-    function resolveRound(room) {
+    async function resolveRound(room) {
+        if (room.roundTimeout) {
+            clearTimeout(room.roundTimeout);
+            room.roundTimeout = null;
+        }
+
         const [player1, player2] = room.players;
         const result = determineWinner(player1.choice, player2.choice);
 
@@ -598,6 +611,101 @@ app.prepare().then(() => {
                 startCountdown(room.id);
             }, 3000);
         }
+    }
+
+    async function handleRoundTimeout(roomId, roundNum) {
+        const room = Array.from(activeRooms.values()).find(r => r.id === roomId);
+        if (!room || room.state !== 'playing' || room.round !== roundNum) return;
+
+        console.log(`[SERVER_GAME] Round timeout for room ${roomId}, round ${roundNum}`);
+
+        const [p1, p2] = room.players;
+        let p1Choice = p1.choice;
+        let p2Choice = p2.choice;
+
+        // Determine winner based on inactivity
+        if (p1Choice && !p2Choice) {
+            p1.score++;
+            emitRoundResult(room, 'player1');
+        } else if (!p1Choice && p2Choice) {
+            p2.score++;
+            emitRoundResult(room, 'player2');
+        } else {
+            // Both inactive = Inactivity Tie
+            room.inactivityTies++;
+            console.log(`[SERVER_GAME] Inactivity tie count: ${room.inactivityTies}`);
+
+            if (room.inactivityTies >= 3) {
+                await refundRoom(room, 'Empate por inactividad (3 veces). Sala cerrada y dinero devuelto.');
+                return;
+            }
+            emitRoundResult(room, 'tie');
+        }
+
+        function emitRoundResult(room, winner) {
+            room.state = 'roundResult';
+            const [p1, p2] = room.players;
+
+            io.to(p1.socketId).emit('roundResult', {
+                playerChoice: p1.choice || 'rock', // Fallback for UI
+                opponentChoice: p2.choice || 'rock',
+                winner: winner === 'player1' ? 'player' : winner === 'player2' ? 'opponent' : 'tie',
+                playerScore: p1.score,
+                opponentScore: p2.score,
+                round: room.round,
+                timeout: true
+            });
+
+            io.to(p2.socketId).emit('roundResult', {
+                playerChoice: p2.choice || 'rock',
+                opponentChoice: p1.choice || 'rock',
+                winner: winner === 'player2' ? 'player' : winner === 'player1' ? 'opponent' : 'tie',
+                playerScore: p2.score,
+                opponentScore: p1.score,
+                round: room.round,
+                timeout: true
+            });
+
+            // Reset choices
+            p1.choice = null;
+            p2.choice = null;
+
+            if (p1.score >= 3 || p2.score >= 3) {
+                setTimeout(() => endGame(room), 3000);
+            } else {
+                setTimeout(() => {
+                    room.round++;
+                    startCountdown(room.id);
+                }, 3000);
+            }
+        }
+    }
+
+    async function refundRoom(room, reason) {
+        console.log(`[SERVER_GAME] Refunding room ${room.id}: ${reason}`);
+        const [p1, p2] = room.players;
+        const mode = room.mode || 'casual';
+        const amount = room.stakeTier || 0;
+        const currency = mode === 'casual' ? 'coins' : 'gems';
+
+        const refundUser = async (uId) => {
+            try {
+                const { data: p } = await supabase.from('profiles').select(currency).eq('id', uId).single();
+                if (p) {
+                    await supabase.from('profiles').update({ [currency]: (p[currency] || 0) + amount }).eq('id', uId);
+                }
+            } catch (e) {
+                console.error(`[SERVER_ECONOMY] Refund failed for ${uId}:`, e.message);
+            }
+        };
+
+        await refundUser(p1.userId);
+        await refundUser(p2.userId);
+
+        io.to(room.id).emit('roomRefunded', { reason });
+
+        activeRooms.delete(p1.socketId);
+        activeRooms.delete(p2.socketId);
     }
 
     async function endGame(room) {
