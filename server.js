@@ -299,17 +299,33 @@ app.prepare().then(() => {
                 io.sockets.sockets.get(opponent.socketId)?.join(room.id);
 
                 // DEDUCT ENTRY FEES
-                const currency = mode === 'casual' ? 'coins' : 'gems';
-                const deductEntry = async (uId) => {
+                const processEntryFee = async (uId, mode, amount) => {
+                    const currency = mode === 'casual' ? 'coins' : 'gems';
                     try {
                         const { data: p } = await supabase.from('profiles').select(currency).eq('id', uId).single();
-                        if (p) {
-                            await supabase.from('profiles').update({ [currency]: p[currency] - currentStake }).eq('id', uId);
+                        if (!p || p[currency] < amount) {
+                            console.error(`[SERVER_ECONOMY] Insufficient funds for ${uId}: ${p ? p[currency] : 'No profile'}`);
+                            return false;
                         }
-                    } catch (e) { console.error('[SERVER_ECONOMY] Deduction failed:', e.message); }
+                        const { error } = await supabase.from('profiles').update({ [currency]: p[currency] - amount }).eq('id', uId);
+                        if (error) throw error;
+                        return true;
+                    } catch (e) {
+                        console.error('[SERVER_ECONOMY] Deduction failed:', e.message);
+                        return false;
+                    }
                 };
-                await deductEntry(player.userId);
-                await deductEntry(opponent.userId);
+
+                const p1Deducted = await processEntryFee(player.userId, mode, currentStake);
+                const p2Deducted = await processEntryFee(opponent.userId, mode, currentStake);
+
+                if (!p1Deducted || !p2Deducted) {
+                    // Logic to handle if deduction fails (e.g., someone cheated or spent coins while in queue)
+                    // For now, we emit an error
+                    socket.emit('matchError', 'Error al procesar la entrada.');
+                    io.to(opponent.socketId).emit('matchError', 'Error al procesar la entrada.');
+                    return;
+                }
 
                 // Notify both players
                 socket.emit('matchFound', {
@@ -371,7 +387,7 @@ app.prepare().then(() => {
             }
         });
 
-        socket.on('rematchResponse', (accepted) => {
+        socket.on('rematchResponse', async (accepted) => {
             const room = activeRooms.get(socket.id);
             if (!room || !room.rematchRequested) return;
 
@@ -379,6 +395,38 @@ app.prepare().then(() => {
             const opponentSocket = room.players.find(p => p.socketId !== socket.id)?.socketId;
 
             if (accepted && requesterSocket && opponentSocket) {
+                // REDEDUCT ENTRY FEES FOR REMATCH
+                const mode = room.mode || 'casual';
+                const currentStake = room.stakeTier || 0;
+
+                const processEntryFee = async (uId, m, amount) => {
+                    const curr = m === 'casual' ? 'coins' : 'gems';
+                    try {
+                        const { data: p } = await supabase.from('profiles').select(curr).eq('id', uId).single();
+                        if (!p || p[curr] < amount) return false;
+                        const { error } = await supabase.from('profiles').update({ [curr]: p[curr] - amount }).eq('id', uId);
+                        if (error) throw error;
+                        return true;
+                    } catch (e) { return false; }
+                };
+
+                const p1Id = room.players[0].userId;
+                const p2Id = room.players[1].userId;
+
+                const d1 = await processEntryFee(p1Id, mode, currentStake);
+                const d2 = await processEntryFee(p2Id, mode, currentStake);
+
+                if (!d1 || !d2) {
+                    io.to(requesterSocket).emit('matchError', 'Uno de los jugadores no tiene suficientes recursos para la revancha.');
+                    io.to(opponentSocket).emit('matchError', 'Uno de los jugadores no tiene suficientes recursos para la revancha.');
+
+                    // Clean up room
+                    activeRooms.delete(room.players[0].socketId);
+                    activeRooms.delete(room.players[1].socketId);
+                    return;
+                }
+
+                // Notify both players
                 // Notify both players
                 io.to(requesterSocket).emit('rematchAccepted');
                 io.to(opponentSocket).emit('rematchAccepted');
@@ -561,7 +609,7 @@ app.prepare().then(() => {
 
         // PRE-CALCULATE UPDATES & PERSIST
         const getUpdateData = async (player, isWinner) => {
-            let resultData = { rpChange: 0, newRp: 0, newRank: 'BRONCE', prize: 0 };
+            let resultData = { rpChange: 0, newRp: 0, newRank: 'BRONCE', prize: 0, newCoins: 0, newGems: 0 };
             try {
                 const { data: profile } = await supabase.from('profiles').select('*').eq('id', player.userId).single();
                 if (!profile) return resultData;
@@ -597,6 +645,14 @@ app.prepare().then(() => {
                 }
 
                 await supabase.from('profiles').update(updates).eq('id', player.userId);
+
+                // Fetch final balances after update
+                const { data: finalProfile } = await supabase.from('profiles').select('coins, gems').eq('id', player.userId).single();
+                if (finalProfile) {
+                    resultData.newCoins = finalProfile.coins;
+                    resultData.newGems = finalProfile.gems;
+                }
+
                 return resultData;
             } catch (e) {
                 console.error('[SERVER_GAME] Profile update failed:', e.message);
@@ -632,7 +688,9 @@ app.prepare().then(() => {
             newRank: p1Data.newRank,
             prize: p1Data.prize,
             mode: room.mode,
-            stake: room.stakeTier
+            stake: room.stakeTier,
+            newCoins: p1Data.newCoins,
+            newGems: p1Data.newGems
         });
 
         io.to(player2.socketId).emit('gameOver', {
@@ -643,7 +701,9 @@ app.prepare().then(() => {
             newRank: p2Data.newRank,
             prize: p2Data.prize,
             mode: room.mode,
-            stake: room.stakeTier
+            stake: room.stakeTier,
+            newCoins: p2Data.newCoins,
+            newGems: p2Data.newGems
         });
     }
 
