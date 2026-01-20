@@ -544,6 +544,8 @@ export default function Home() {
                 // Update RP and rank if provided
                 if (data.newRp !== undefined) setRp(data.newRp);
                 if (data.newRank) setRankName(data.newRank);
+                if (data.newCoins !== undefined) setCoins(data.newCoins);
+                if (data.newGems !== undefined) setGems(data.newGems);
 
                 // Play final game voice
                 setTimeout(() => {
@@ -561,6 +563,7 @@ export default function Home() {
 
             socketIo.on('rematchAccepted', () => {
                 setRematchStatus('Rematch accepted! Starting new game...');
+                checkProfile();
                 setTimeout(() => {
                     setGameState('countdown');
                     setPlayerScore(0);

@@ -38,4 +38,6 @@ export interface GameOverData {
     newRank?: string;
     mode?: string;
     stake?: number;
+    newCoins?: number;
+    newGems?: number;
 }
