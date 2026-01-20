@@ -1213,305 +1213,325 @@ export default function Home() {
                     )}
 
                     {gameState === 'gameOver' && (
-                        <div style={{
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            height: '80vh',
-                            width: '100%'
-                        }}>
-                            {/* Intuitive and simplified GameOver screen */}
-                            <div>
-                                {/* Rematch System */}
-                                <div className="rematch-card">
-                                    <div className="game-status-text result" style={{
-                                        fontSize: '2.5rem',
-                                        fontWeight: 900,
-                                        textTransform: 'uppercase',
-                                        marginBottom: '20px',
-                                        color: gameWinner === 'player' ? 'var(--score-green)' : 'var(--score-red)'
-                                    }}>
-                                        {gameWinner === 'player' ? 'VICTORY' : 'DEFEAT'}
-                                    </div>
+                        <div className="rematch-card">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ duration: 0.5, type: 'spring' }}
+                                style={{
+                                    fontSize: '3.5rem',
+                                    fontWeight: 900,
+                                    marginBottom: '15px',
+                                    color: gameWinner === 'player' ? '#00ff88' : '#ff4466',
+                                    textShadow: `0 0 40px ${gameWinner === 'player' ? '#00ff88' : '#ff4466'}`,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '3px'
+                                }}
+                            >
+                                {gameWinner === 'player' ? 'VICTORY' : 'DEFEAT'}
+                            </motion.div>
 
-                                    <p style={{ marginBottom: '25px', fontSize: '1.1rem', opacity: 0.9 }}>
-                                        Play this opponent again?
-                                    </p>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                                        <button
-                                            className="btn-primary"
-                                            onClick={handleRequestRematch}
-                                            disabled={rematchRequested || rematchStatus === 'Opponent disconnected!'}
-                                        >
-                                            {rematchRequested ? 'WAITING...' : 'REMATCH'}
-                                        </button>
-                                        <button className="btn-secondary" onClick={handlePlayAgain}>
-                                            START
-                                        </button>
-                                        <button
-                                            className="btn-secondary"
-                                            style={{ background: 'rgba(255, 255, 255, 0.1)' }}
-                                            onClick={() => {
-                                                setGameState('lobby');
-                                                setRematchStatus('');
-                                                setRematchRequested(false);
-                                                if (socket) socket.emit('leaveQueue'); // Ensure clean state
-                                                playSound('/sounds/sfx/click.mp3');
-                                            }}
-                                        >
-                                            MENU
-                                        </button>
-                                    </div>
+                            <p style={{
+                                marginBottom: '30px',
+                                fontSize: '1rem',
+                                opacity: 0.7,
+                                letterSpacing: '1px',
+                                color: 'rgba(255,255,255,0.8)'
+                            }}>
+                                Play this opponent again?
+                            </p>
+                            <div style={{ display: 'flex', gap: '12px', width: '100%', maxWidth: '400px', marginBottom: '20px' }}>
+                                <button
+                                    className="btn-primary"
+                                    onClick={handleRequestRematch}
+                                    disabled={rematchRequested || rematchStatus === 'Opponent disconnected!'}
+                                >
+                                    {rematchRequested ? 'WAITING...' : 'REMATCH'}
+                                </button>
+                                <button className="btn-secondary" onClick={handlePlayAgain}>
+                                    START
+                                </button>
+                                <button
+                                    className="btn-secondary"
+                                    style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                                    onClick={() => {
+                                        setGameState('lobby');
+                                        setRematchStatus('');
+                                        setRematchRequested(false);
+                                        if (socket) socket.emit('leaveQueue'); // Ensure clean state
+                                        playSound('/sounds/sfx/click.mp3');
+                                    }}
+                                >
+                                    MENU
+                                </button>
+                            </div>
 
-                                    {rematchStatus && (
-                                        <div className="rematch-status" style={{ marginTop: '20px', color: 'var(--primary)', fontWeight: 600 }}>
-                                            {rematchStatus}
-                                            {rematchStatus.includes('wants a rematch') && (
-                                                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '10px' }}>
-                                                    <button className="btn-primary" onClick={() => handleRematchResponse(true)} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>Accept</button>
-                                                    <button className="btn-secondary" onClick={() => handleRematchResponse(false)} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>Decline</button>
-                                                </div>
-                                            )}
+                            {rematchStatus && (
+                                <div className="rematch-status" style={{ marginTop: '20px', color: 'var(--primary)', fontWeight: 600 }}>
+                                    {rematchStatus}
+                                    {rematchStatus.includes('wants a rematch') && (
+                                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '10px' }}>
+                                            <button className="btn-primary" onClick={() => handleRematchResponse(true)} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>Accept</button>
+                                            <button className="btn-secondary" onClick={() => handleRematchResponse(false)} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>Decline</button>
                                         </div>
                                     )}
+                                </div>
+                            )}
 
-                                    {/* Persistent Reward Transfer Progress Bar */}
-                                    {showRewardAnim && rewardData && (
+                            {/* Premium Transfer Card */}
+                            {showRewardAnim && rewardData && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 30 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.6, delay: 0.2 }}
+                                    style={{
+                                        marginTop: '30px',
+                                        padding: '20px',
+                                        background: 'rgba(255, 255, 255, 0.03)',
+                                        backdropFilter: 'blur(20px)',
+                                        borderRadius: '20px',
+                                        border: `2px solid ${rewardData.isWin ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 68, 102, 0.3)'}`,
+                                        boxShadow: `0 10px 40px ${rewardData.isWin ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 68, 102, 0.1)'}`,
+                                        width: '100%',
+                                        maxWidth: '360px'
+                                    }}
+                                >
+                                    {/* Header */}
+                                    <div style={{
+                                        textAlign: 'center',
+                                        marginBottom: '16px',
+                                        fontSize: '0.75rem',
+                                        color: 'rgba(255,255,255,0.6)',
+                                        fontWeight: 800,
+                                        letterSpacing: '2px',
+                                        textTransform: 'uppercase'
+                                    }}>
+                                        {rewardData.isWin ? '🎉 TRANSFERENCIA RECIBIDA' : '📤 TRANSFERENCIA ENVIADA'}
+                                    </div>
+
+                                    {/* Player Labels */}
+                                    <div style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        marginBottom: '10px',
+                                        fontSize: '0.7rem',
+                                        fontWeight: 800,
+                                        textTransform: 'uppercase'
+                                    }}>
+                                        <div style={{ color: rewardData.isWin ? '#ff6b6b' : '#51cf66' }}>
+                                            {rewardData.isWin ? 'OPONENTE' : 'TÚ'}
+                                        </div>
+                                        <div style={{ color: rewardData.isWin ? '#51cf66' : '#ff6b6b' }}>
+                                            {rewardData.isWin ? 'TÚ' : 'OPONENTE'}
+                                        </div>
+                                    </div>
+
+                                    {/* Premium Progress Track */}
+                                    <div style={{
+                                        position: 'relative',
+                                        height: '60px',
+                                        background: 'rgba(0, 0, 0, 0.4)',
+                                        borderRadius: '30px',
+                                        overflow: 'hidden',
+                                        border: '2px solid rgba(255,255,255,0.08)',
+                                        boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.3)'
+                                    }}>
+                                        {/* Animated Gradient Fill */}
                                         <motion.div
-                                            initial={{ opacity: 0, scale: 0.95 }}
-                                            animate={{ opacity: 1, scale: 1 }}
-                                            transition={{ duration: 0.4 }}
-                                            style={{
-                                                marginTop: '20px',
-                                                padding: '15px',
-                                                background: 'rgba(0,0,0,0.7)',
-                                                borderRadius: '12px',
-                                                border: `2px solid ${rewardData.isWin ? '#00ff00' : '#ff0000'}`,
+                                            initial={{ width: '0%' }}
+                                            animate={{ width: '100%' }}
+                                            transition={{
+                                                duration: 2.5,
+                                                ease: 'easeInOut',
+                                                repeat: Infinity,
+                                                repeatDelay: 0.5
                                             }}
-                                        >
-                                            {/* Header */}
-                                            <div style={{
-                                                textAlign: 'center',
-                                                marginBottom: '12px',
-                                                fontSize: '0.9rem',
-                                                color: 'rgba(255,255,255,0.9)',
-                                                fontWeight: 700
-                                            }}>
-                                                {rewardData.isWin ? '🎉 TRANSFERENCIA RECIBIDA' : '📤 TRANSFERENCIA ENVIADA'}
-                                            </div>
+                                            style={{
+                                                position: 'absolute',
+                                                top: 0,
+                                                left: 0,
+                                                height: '100%',
+                                                background: rewardData.isWin
+                                                    ? 'linear-gradient(90deg, rgba(0,255,136,0.2), rgba(0,255,136,0.5))'
+                                                    : 'linear-gradient(90deg, rgba(255,68,102,0.2), rgba(255,68,102,0.5))',
+                                                transformOrigin: 'left'
+                                            }}
+                                        />
 
-                                            {/* Player Labels */}
-                                            <div style={{
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                marginBottom: '8px',
-                                                fontSize: '0.75rem',
-                                                fontWeight: 700
-                                            }}>
-                                                <div style={{ color: rewardData.isWin ? '#ff6b6b' : '#51cf66' }}>
-                                                    {rewardData.isWin ? 'OPONENTE' : 'TÚ'}
-                                                </div>
-                                                <div style={{ color: rewardData.isWin ? '#51cf66' : '#ff6b6b' }}>
-                                                    {rewardData.isWin ? 'TÚ' : 'OPONENTE'}
-                                                </div>
-                                            </div>
-
-                                            {/* Progress Bar Container */}
-                                            <div style={{
-                                                position: 'relative',
-                                                height: '50px',
-                                                background: 'rgba(255,255,255,0.05)',
-                                                borderRadius: '25px',
-                                                overflow: 'hidden',
-                                                border: '2px solid rgba(255,255,255,0.1)'
-                                            }}>
-                                                {/* Animated Fill Bar - ALWAYS Left to Right */}
+                                        {/* Flowing Icons - ALWAYS Left to Right */}
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            right: 0,
+                                            bottom: 0,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            pointerEvents: 'none'
+                                        }}>
+                                            {[...Array(4)].map((_, i) => (
                                                 <motion.div
-                                                    initial={{ width: '0%' }}
-                                                    animate={{ width: '100%' }}
-                                                    transition={{
-                                                        duration: 2,
-                                                        ease: 'easeInOut',
-                                                        repeat: Infinity,
-                                                        repeatDelay: 0.5
+                                                    key={i}
+                                                    initial={{
+                                                        x: '-100%',
+                                                        opacity: 0
                                                     }}
-                                                    style={{
-                                                        position: 'absolute',
-                                                        top: 0,
-                                                        left: 0,
-                                                        height: '100%',
-                                                        background: rewardData.isWin
-                                                            ? 'linear-gradient(90deg, rgba(0,255,0,0.3), rgba(0,255,0,0.6))'
-                                                            : 'linear-gradient(90deg, rgba(255,0,0,0.3), rgba(255,0,0,0.6))', // Keep color logic but same direction
-                                                        transformOrigin: 'left'
-                                                    }}
-                                                />
-
-                                                {/* Flowing Icons - ALWAYS Left to Right */}
-                                                <div style={{
-                                                    position: 'absolute',
-                                                    top: 0,
-                                                    left: 0,
-                                                    right: 0,
-                                                    bottom: 0,
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    pointerEvents: 'none'
-                                                }}>
-                                                    {[...Array(4)].map((_, i) => (
-                                                        <motion.div
-                                                            key={i}
-                                                            initial={{
-                                                                x: '-100%',
-                                                                opacity: 0
-                                                            }}
-                                                            animate={{
-                                                                x: '100%',
-                                                                opacity: [0, 1, 1, 0]
-                                                            }}
-                                                            transition={{
-                                                                duration: 1.8,
-                                                                delay: i * 0.3,
-                                                                repeat: Infinity,
-                                                                repeatDelay: 0.2,
-                                                                ease: 'linear'
-                                                            }}
-                                                            style={{
-                                                                position: 'absolute',
-                                                                fontSize: '1.5rem',
-                                                                left: 0,
-                                                                right: 'auto'
-                                                            }}
-                                                        >
-                                                            {rewardData.type === 'rp' ? '⭐' : rewardData.type === 'gems' ? '💎' : '🪙'}
-                                                        </motion.div>
-                                                    ))}
-                                                </div>
-
-                                                {/* Center Arrow - Always pointing Right */}
-                                                <motion.div
                                                     animate={{
-                                                        scale: [1, 1.2, 1],
-                                                        x: [0, 10, 0] // Subtle movement to right
+                                                        x: '100%',
+                                                        opacity: [0, 1, 1, 0]
                                                     }}
-                                                    transition={{ duration: 1, repeat: Infinity }}
+                                                    transition={{
+                                                        duration: 1.8,
+                                                        delay: i * 0.3,
+                                                        repeat: Infinity,
+                                                        repeatDelay: 0.2,
+                                                        ease: 'linear'
+                                                    }}
                                                     style={{
                                                         position: 'absolute',
-                                                        top: '50%',
-                                                        left: '50%',
-                                                        transform: 'translate(-50%, -50%)',
                                                         fontSize: '1.5rem',
-                                                        color: rewardData.isWin ? '#00ff00' : '#ff0000',
-                                                        textShadow: '0 0 10px currentColor',
-                                                        zIndex: 2
+                                                        left: 0,
+                                                        right: 'auto'
                                                     }}
                                                 >
-                                                    →
+                                                    {rewardData.type === 'rp' ? '⭐' : rewardData.type === 'gems' ? '💎' : '🪙'}
                                                 </motion.div>
-                                            </div>
+                                            ))}
+                                        </div>
 
-                                            {/* Amount Display */}
-                                            <motion.div
-                                                initial={{ scale: 0 }}
-                                                animate={{ scale: 1 }}
-                                                transition={{ delay: 0.2, type: 'spring' }}
-                                                style={{
-                                                    marginTop: '12px',
-                                                    textAlign: 'center',
-                                                    padding: '8px',
-                                                    background: rewardData.isWin
-                                                        ? 'rgba(0,255,0,0.1)'
-                                                        : 'rgba(255,0,0,0.1)',
-                                                    borderRadius: '8px'
-                                                }}
-                                            >
-                                                <div style={{
-                                                    fontSize: '1.4rem',
-                                                    fontWeight: 900,
-                                                    color: rewardData.isWin ? '#00ff00' : '#ff0000',
-                                                    textShadow: `0 0 10px ${rewardData.isWin ? '#00ff00' : '#ff0000'}`
-                                                }}>
-                                                    {rewardData.isWin ? '+' : '-'}{Math.abs(rewardData.amount)} {rewardData.type.toUpperCase()}
-                                                </div>
-                                                <div style={{
-                                                    fontSize: '0.75rem',
-                                                    color: 'rgba(255,255,255,0.7)',
-                                                    marginTop: '4px'
-                                                }}>
-                                                    {rewardData.type === 'coins' ? 'Monedas' : rewardData.type === 'gems' ? 'Gemas' : ' Puntos de Rango'}
-                                                </div>
-                                            </motion.div>
+                                        {/* Premium Arrow */}
+                                        <motion.div
+                                            animate={{
+                                                scale: [1, 1.15, 1],
+                                                x: [0, 8, 0]
+                                            }}
+                                            transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+                                            style={{
+                                                position: 'absolute',
+                                                top: '50%',
+                                                left: '50%',
+                                                transform: 'translate(-50%, -50%)',
+                                                fontSize: '2rem',
+                                                fontWeight: 900,
+                                                color: rewardData.isWin ? '#00ff88' : '#ff4466',
+                                                textShadow: `0 0 20px ${rewardData.isWin ? '#00ff88' : '#ff4466'}`,
+                                                filter: 'drop-shadow(0 0 10px currentColor)',
+                                                zIndex: 3
+                                            }}
+                                        >
+                                            →
                                         </motion.div>
-                                    )}
-                                </div>
-                            </div>
+                                    </div>
+
+                                    {/* Premium Amount Display */}
+                                    <motion.div
+                                        initial={{ scale: 0.8, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        transition={{ delay: 0.3, type: 'spring', stiffness: 200 }}
+                                        style={{
+                                            marginTop: '16px',
+                                            textAlign: 'center',
+                                            padding: '12px',
+                                            background: rewardData.isWin
+                                                ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.08), rgba(0, 255, 136, 0.12))'
+                                                : 'linear-gradient(135deg, rgba(255, 68, 102, 0.08), rgba(255, 68, 102, 0.12))',
+                                            borderRadius: '12px',
+                                            border: `1px solid ${rewardData.isWin ? 'rgba(0, 255, 136, 0.2)' : 'rgba(255, 68, 102, 0.2)'}`
+                                        }}
+                                    >
+                                        <div style={{
+                                            fontSize: '1.8rem',
+                                            fontWeight: 900,
+                                            color: rewardData.isWin ? '#00ff88' : '#ff4466',
+                                            textShadow: `0 0 20px ${rewardData.isWin ? '#00ff88' : '#ff4466'}`,
+                                            letterSpacing: '-1px'
+                                        }}>
+                                            {rewardData.isWin ? '+' : '-'}{Math.abs(rewardData.amount)} {rewardData.type.toUpperCase()}
+                                        </div>
+                                        <div style={{
+                                            fontSize: '0.7rem',
+                                            color: 'rgba(255,255,255,0.5)',
+                                            marginTop: '6px',
+                                            fontWeight: 600,
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '1px'
+                                        }}>
+                                            {rewardData.type === 'coins' ? 'Monedas' : rewardData.type === 'gems' ? 'Gemas' : 'Puntos de Rango'}
+                                        </div>
+                                    </motion.div>
+                                </motion.div>
+                            )}
                         </div>
                     )}
                 </div>
 
                 {/* Choice buttons */}
-                {(gameState === 'playing' || gameState === 'roundResult') && (
-                    <div className="choice-buttons">
-                        <button
-                            className="choice-btn"
-                            onClick={() => handleChoice('rock')}
-                            disabled={choiceMade || gameState === 'roundResult'}
-                            title="Rock"
-                        >
-                            ✊
-                        </button>
-                        <button
-                            className="choice-btn"
-                            onClick={() => handleChoice('paper')}
-                            disabled={choiceMade || gameState === 'roundResult'}
-                            title="Paper"
-                        >
-                            ✋
-                        </button>
-                        <button
-                            className="choice-btn"
-                            onClick={() => handleChoice('scissors')}
-                            disabled={choiceMade || gameState === 'roundResult'}
-                            title="Scissors"
-                        >
-                            ✌️
-                        </button>
-                    </div>
-                )}
-            </div>
+                {
+                    (gameState === 'playing' || gameState === 'roundResult') && (
+                        <div className="choice-buttons">
+                            <button
+                                className="choice-btn"
+                                onClick={() => handleChoice('rock')}
+                                disabled={choiceMade || gameState === 'roundResult'}
+                                title="Rock"
+                            >
+                                ✊
+                            </button>
+                            <button
+                                className="choice-btn"
+                                onClick={() => handleChoice('paper')}
+                                disabled={choiceMade || gameState === 'roundResult'}
+                                title="Paper"
+                            >
+                                ✋
+                            </button>
+                            <button
+                                className="choice-btn"
+                                onClick={() => handleChoice('scissors')}
+                                disabled={choiceMade || gameState === 'roundResult'}
+                                title="Scissors"
+                            >
+                                ✌️
+                            </button>
+                        </div>
+                    )
+                }
+            </div >
 
             {/* Onboarding Modal */}
-            {showOnboarding && (
-                <div className="modal-overlay">
-                    <div className="modal-content">
-                        <h2 className="modal-title">WELCOME PLAYER</h2>
-                        <div className="input-group">
-                            <label className="input-label">Choose your fighter name</label>
-                            <input
-                                type="text"
-                                className="modal-input"
-                                placeholder="Username"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                maxLength={15}
-                            />
+            {
+                showOnboarding && (
+                    <div className="modal-overlay">
+                        <div className="modal-content">
+                            <h2 className="modal-title">WELCOME PLAYER</h2>
+                            <div className="input-group">
+                                <label className="input-label">Choose your fighter name</label>
+                                <input
+                                    type="text"
+                                    className="modal-input"
+                                    placeholder="Username"
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    maxLength={15}
+                                />
+                            </div>
+                            <div className="input-group">
+                                <label className="input-label">Date of Birth</label>
+                                <input
+                                    type="date"
+                                    className="modal-input"
+                                    value={birthDate}
+                                    onChange={(e) => setBirthDate(e.target.value)}
+                                />
+                            </div>
+                            <button className="btn-enter-arena" onClick={handleSaveProfile}>
+                                ENTER ARENA
+                            </button>
                         </div>
-                        <div className="input-group">
-                            <label className="input-label">Date of Birth</label>
-                            <input
-                                type="date"
-                                className="modal-input"
-                                value={birthDate}
-                                onChange={(e) => setBirthDate(e.target.value)}
-                            />
-                        </div>
-                        <button className="btn-enter-arena" onClick={handleSaveProfile}>
-                            ENTER ARENA
-                        </button>
                     </div>
-                </div>
-            )}
+                )
+            }
         </>
     );
 }
