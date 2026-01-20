@@ -631,7 +631,8 @@ app.prepare().then(() => {
             newRp: p1Data.newRp,
             newRank: p1Data.newRank,
             prize: p1Data.prize,
-            mode: room.mode
+            mode: room.mode,
+            stake: room.stakeTier
         });
 
         io.to(player2.socketId).emit('gameOver', {
@@ -641,7 +642,8 @@ app.prepare().then(() => {
             newRp: p2Data.newRp,
             newRank: p2Data.newRank,
             prize: p2Data.prize,
-            mode: room.mode
+            mode: room.mode,
+            stake: room.stakeTier
         });
     }
 

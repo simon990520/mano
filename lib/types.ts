@@ -32,4 +32,10 @@ export interface GameOverData {
         player: number;
         opponent: number;
     };
+    prize?: number;
+    rpChange?: number;
+    newRp?: number;
+    newRank?: string;
+    mode?: string;
+    stake?: number;
 }

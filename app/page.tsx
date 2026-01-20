@@ -502,6 +502,49 @@ export default function Home() {
                 setGameWinner(data.winner);
                 setGameState('gameOver');
 
+                // Trigger reward animation with data from server
+                // Check if there is prize, RP change, or if it's a casual game with a stake (for loser)
+                if (data.prize || data.rpChange || (data.mode === 'casual' && data.stake)) {
+                    const isWinner = data.winner === 'player';
+
+                    // Determine reward type and amount
+                    let rewardType: 'coins' | 'gems' | 'rp' = 'coins';
+                    let rewardAmount = 0;
+
+                    if (data.mode === 'ranked') {
+                        if (isWinner) {
+                            rewardType = 'gems';
+                            rewardAmount = data.prize || 0;
+                        } else {
+                            rewardType = 'rp';
+                            rewardAmount = data.rpChange || 0;
+                        }
+                    } else {
+                        // Casual mode
+                        rewardType = 'coins';
+                        if (isWinner) {
+                            rewardAmount = data.prize || 0;
+                        } else {
+                            // Loser lost the stake
+                            rewardAmount = -(data.stake || 0);
+                        }
+                    }
+
+                    // Set animation data (PERSISTENT - NO TIMEOUT)
+                    if (rewardAmount !== 0) {
+                        setRewardData({
+                            type: rewardType,
+                            amount: rewardAmount,
+                            isWin: isWinner
+                        });
+                        setShowRewardAnim(true);
+                    }
+                }
+
+                // Update RP and rank if provided
+                if (data.newRp !== undefined) setRp(data.newRp);
+                if (data.newRank) setRankName(data.newRank);
+
                 // Play final game voice
                 setTimeout(() => {
                     if (data.winner === 'player') {
@@ -1125,9 +1168,15 @@ export default function Home() {
                     )}
 
                     {gameState === 'gameOver' && (
-                        <div style={{ textAlign: 'center' }}>
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            height: '80vh',
+                            width: '100%'
+                        }}>
                             {/* Intuitive and simplified GameOver screen */}
-                            <div style={{ marginTop: '25vh' }}>
+                            <div>
                                 {/* Rematch System */}
                                 <div className="rematch-card">
                                     <div className="game-status-text result" style={{
@@ -1181,95 +1230,171 @@ export default function Home() {
                                         </div>
                                     )}
 
-                                    {/* Animated Reward Flow */}
+                                    {/* Persistent Reward Transfer Progress Bar */}
                                     {showRewardAnim && rewardData && (
                                         <motion.div
-                                            initial={{ opacity: 0, scale: 0.5 }}
+                                            initial={{ opacity: 0, scale: 0.95 }}
                                             animate={{ opacity: 1, scale: 1 }}
-                                            transition={{ duration: 0.5, type: "spring" }}
+                                            transition={{ duration: 0.4 }}
                                             style={{
                                                 marginTop: '20px',
-                                                padding: '20px',
-                                                background: rewardData.isWin
-                                                    ? 'linear-gradient(135deg, rgba(0,255,0,0.15), rgba(0,200,0,0.1))'
-                                                    : 'linear-gradient(135deg, rgba(255,0,0,0.15), rgba(200,0,0,0.1))',
-                                                borderRadius: '15px',
+                                                padding: '15px',
+                                                background: 'rgba(0,0,0,0.7)',
+                                                borderRadius: '12px',
                                                 border: `2px solid ${rewardData.isWin ? '#00ff00' : '#ff0000'}`,
-                                                boxShadow: `0 0 20px ${rewardData.isWin ? 'rgba(0,255,0,0.3)' : 'rgba(255,0,0,0.3)'}`,
-                                                position: 'relative',
-                                                overflow: 'hidden'
                                             }}
                                         >
-                                            {/* Flowing Icons Animation */}
+                                            {/* Header */}
                                             <div style={{
-                                                position: 'absolute',
-                                                top: 0,
-                                                left: 0,
-                                                right: 0,
-                                                bottom: 0,
-                                                pointerEvents: 'none',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center'
+                                                textAlign: 'center',
+                                                marginBottom: '12px',
+                                                fontSize: '0.9rem',
+                                                color: 'rgba(255,255,255,0.9)',
+                                                fontWeight: 700
                                             }}>
-                                                {[...Array(5)].map((_, i) => (
-                                                    <motion.div
-                                                        key={i}
-                                                        initial={{
-                                                            x: rewardData.isWin ? -100 : 100,
-                                                            y: Math.random() * 40 - 20,
-                                                            opacity: 0
-                                                        }}
-                                                        animate={{
-                                                            x: rewardData.isWin ? 100 : -100,
-                                                            y: Math.random() * 40 - 20,
-                                                            opacity: [0, 1, 1, 0]
-                                                        }}
-                                                        transition={{
-                                                            duration: 1.5,
-                                                            delay: i * 0.1,
-                                                            repeat: 2
-                                                        }}
-                                                        style={{
-                                                            position: 'absolute',
-                                                            fontSize: '1.5rem',
-                                                            left: '50%'
-                                                        }}
-                                                    >
-                                                        {rewardData.type === 'rp' ? '📊' : rewardData.type === 'gems' ? '💎' : '🪙'}
-                                                    </motion.div>
-                                                ))}
+                                                {rewardData.isWin ? '🎉 TRANSFERENCIA RECIBIDA' : '📤 TRANSFERENCIA ENVIADA'}
                                             </div>
 
-                                            {/* Counter Animation */}
+                                            {/* Player Labels */}
+                                            <div style={{
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                marginBottom: '8px',
+                                                fontSize: '0.75rem',
+                                                fontWeight: 700
+                                            }}>
+                                                <div style={{ color: rewardData.isWin ? '#ff6b6b' : '#51cf66' }}>
+                                                    {rewardData.isWin ? 'OPONENTE' : 'TÚ'}
+                                                </div>
+                                                <div style={{ color: rewardData.isWin ? '#51cf66' : '#ff6b6b' }}>
+                                                    {rewardData.isWin ? 'TÚ' : 'OPONENTE'}
+                                                </div>
+                                            </div>
+
+                                            {/* Progress Bar Container */}
+                                            <div style={{
+                                                position: 'relative',
+                                                height: '50px',
+                                                background: 'rgba(255,255,255,0.05)',
+                                                borderRadius: '25px',
+                                                overflow: 'hidden',
+                                                border: '2px solid rgba(255,255,255,0.1)'
+                                            }}>
+                                                {/* Animated Fill Bar - ALWAYS Left to Right */}
+                                                <motion.div
+                                                    initial={{ width: '0%' }}
+                                                    animate={{ width: '100%' }}
+                                                    transition={{
+                                                        duration: 2,
+                                                        ease: 'easeInOut',
+                                                        repeat: Infinity,
+                                                        repeatDelay: 0.5
+                                                    }}
+                                                    style={{
+                                                        position: 'absolute',
+                                                        top: 0,
+                                                        left: 0,
+                                                        height: '100%',
+                                                        background: rewardData.isWin
+                                                            ? 'linear-gradient(90deg, rgba(0,255,0,0.3), rgba(0,255,0,0.6))'
+                                                            : 'linear-gradient(90deg, rgba(255,0,0,0.3), rgba(255,0,0,0.6))', // Keep color logic but same direction
+                                                        transformOrigin: 'left'
+                                                    }}
+                                                />
+
+                                                {/* Flowing Icons - ALWAYS Left to Right */}
+                                                <div style={{
+                                                    position: 'absolute',
+                                                    top: 0,
+                                                    left: 0,
+                                                    right: 0,
+                                                    bottom: 0,
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    pointerEvents: 'none'
+                                                }}>
+                                                    {[...Array(4)].map((_, i) => (
+                                                        <motion.div
+                                                            key={i}
+                                                            initial={{
+                                                                x: '-100%',
+                                                                opacity: 0
+                                                            }}
+                                                            animate={{
+                                                                x: '100%',
+                                                                opacity: [0, 1, 1, 0]
+                                                            }}
+                                                            transition={{
+                                                                duration: 1.8,
+                                                                delay: i * 0.3,
+                                                                repeat: Infinity,
+                                                                repeatDelay: 0.2,
+                                                                ease: 'linear'
+                                                            }}
+                                                            style={{
+                                                                position: 'absolute',
+                                                                fontSize: '1.5rem',
+                                                                left: 0,
+                                                                right: 'auto'
+                                                            }}
+                                                        >
+                                                            {rewardData.type === 'rp' ? '⭐' : rewardData.type === 'gems' ? '💎' : '🪙'}
+                                                        </motion.div>
+                                                    ))}
+                                                </div>
+
+                                                {/* Center Arrow - Always pointing Right */}
+                                                <motion.div
+                                                    animate={{
+                                                        scale: [1, 1.2, 1],
+                                                        x: [0, 10, 0] // Subtle movement to right
+                                                    }}
+                                                    transition={{ duration: 1, repeat: Infinity }}
+                                                    style={{
+                                                        position: 'absolute',
+                                                        top: '50%',
+                                                        left: '50%',
+                                                        transform: 'translate(-50%, -50%)',
+                                                        fontSize: '1.5rem',
+                                                        color: rewardData.isWin ? '#00ff00' : '#ff0000',
+                                                        textShadow: '0 0 10px currentColor',
+                                                        zIndex: 2
+                                                    }}
+                                                >
+                                                    →
+                                                </motion.div>
+                                            </div>
+
+                                            {/* Amount Display */}
                                             <motion.div
-                                                initial={{ scale: 0.8 }}
-                                                animate={{ scale: [0.8, 1.2, 1] }}
-                                                transition={{ duration: 0.6 }}
+                                                initial={{ scale: 0 }}
+                                                animate={{ scale: 1 }}
+                                                transition={{ delay: 0.2, type: 'spring' }}
                                                 style={{
-                                                    position: 'relative',
-                                                    zIndex: 1,
-                                                    textAlign: 'center'
+                                                    marginTop: '12px',
+                                                    textAlign: 'center',
+                                                    padding: '8px',
+                                                    background: rewardData.isWin
+                                                        ? 'rgba(0,255,0,0.1)'
+                                                        : 'rgba(255,0,0,0.1)',
+                                                    borderRadius: '8px'
                                                 }}
                                             >
                                                 <div style={{
-                                                    fontSize: '1.5rem',
+                                                    fontSize: '1.4rem',
                                                     fontWeight: 900,
                                                     color: rewardData.isWin ? '#00ff00' : '#ff0000',
-                                                    textShadow: `0 0 10px ${rewardData.isWin ? '#00ff00' : '#ff0000'}`,
-                                                    marginBottom: '8px'
+                                                    textShadow: `0 0 10px ${rewardData.isWin ? '#00ff00' : '#ff0000'}`
                                                 }}>
-                                                    {rewardData.isWin ? '+' : ''}{rewardData.amount} {rewardData.type.toUpperCase()}
-                                                </div>
-                                                <div style={{ fontSize: '3rem' }}>
-                                                    {rewardData.type === 'rp' ? '📈' : rewardData.type === 'gems' ? '💎' : '🪙'}
+                                                    {rewardData.isWin ? '+' : '-'}{Math.abs(rewardData.amount)} {rewardData.type.toUpperCase()}
                                                 </div>
                                                 <div style={{
-                                                    fontSize: '0.9rem',
-                                                    color: 'rgba(255,255,255,0.8)',
-                                                    marginTop: '8px'
+                                                    fontSize: '0.75rem',
+                                                    color: 'rgba(255,255,255,0.7)',
+                                                    marginTop: '4px'
                                                 }}>
-                                                    {rewardData.isWin ? '¡Ganaste!' : 'Perdiste'}
+                                                    {rewardData.type === 'coins' ? 'Monedas' : rewardData.type === 'gems' ? 'Gemas' : ' Puntos de Rango'}
                                                 </div>
                                             </motion.div>
                                         </motion.div>
