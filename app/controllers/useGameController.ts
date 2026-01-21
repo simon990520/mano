@@ -126,11 +126,12 @@ export const useGameController = (
         });
 
         socket.on('gameOver', (data: GameOverData) => {
+            console.log('[GAME_STATUS] Game Over:', data);
             setGameWinner(data.winner);
             setGameState('gameOver');
 
             // Trigger Economy Update
-            onGameOverUpdate(data);
+            if (onGameOverUpdate) onGameOverUpdate(data);
 
             if (data.prize || data.rpChange || (data.mode === 'casual' && data.stake)) {
                 const isWinner = data.winner === 'player';
@@ -160,13 +161,17 @@ export const useGameController = (
         });
 
         socket.on('rematchRequested', () => {
+            console.log('[REMATCH] Received request from opponent');
             setRematchStatus('Opponent wants a rematch!');
         });
 
         socket.on('rematchAccepted', () => {
+            console.log('[REMATCH] Accepted! Starting new game sequence...');
             setRematchStatus('Rematch accepted! Starting new game...');
-            checkProfile();
+            if (checkProfile) checkProfile();
+
             setTimeout(() => {
+                console.log('[REMATCH] Resetting game state...');
                 setGameState('countdown');
                 setPlayerScore(0);
                 setOpponentScore(0);
@@ -182,6 +187,7 @@ export const useGameController = (
         });
 
         socket.on('rematchDeclined', () => {
+            console.log('[REMATCH] Opponent declined');
             setRematchStatus('Opponent declined the rematch');
             setTimeout(() => {
                 setGameState('lobby');
@@ -196,6 +202,7 @@ export const useGameController = (
         });
 
         socket.on('opponentLeft', () => {
+            console.log('[GAME_STATUS] Opponent left');
             setRematchStatus('Opponent left for a new game.');
             setRematchRequested(false);
         });
@@ -244,6 +251,7 @@ export const useGameController = (
 
     const handleRequestRematch = () => {
         if (socket) {
+            console.log('[REMATCH] Requesting...');
             playSound('/sounds/sfx/click.mp3');
             socket.emit('requestRematch');
             setRematchRequested(true);
@@ -253,6 +261,7 @@ export const useGameController = (
 
     const handleRematchResponse = (accepted: boolean) => {
         if (socket) {
+            console.log('[REMATCH] Responding:', accepted);
             playSound('/sounds/sfx/click.mp3');
             socket.emit('rematchResponse', accepted);
             if (accepted) {
