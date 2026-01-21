@@ -1278,65 +1278,136 @@ export default function Home() {
                                 </div>
                             )}
 
-                            {/* Premium Transfer Card */}
+                            {/* Premium Reward Transfer Component */}
                             {showRewardAnim && rewardData && (
                                 <motion.div
-                                    initial={{ opacity: 0, y: 30 }}
+                                    initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    transition={{ duration: 0.6, delay: 0.2 }}
+                                    transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
                                     style={{
                                         marginTop: '30px',
-                                        padding: '20px',
-                                        background: 'rgba(255, 255, 255, 0.03)',
-                                        backdropFilter: 'blur(20px)',
+                                        padding: '25px',
+                                        background: rewardData.isWin
+                                            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.15) 100%)'
+                                            : 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.15) 100%)',
+                                        backdropFilter: 'blur(20px) saturate(180%)',
                                         borderRadius: '20px',
-                                        border: `2px solid ${rewardData.isWin ? 'rgba(0, 255, 136, 0.3)' : 'rgba(255, 68, 102, 0.3)'}`,
-                                        boxShadow: `0 10px 40px ${rewardData.isWin ? 'rgba(0, 255, 136, 0.1)' : 'rgba(255, 68, 102, 0.1)'}`,
+                                        border: `2px solid ${rewardData.isWin ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                                        boxShadow: rewardData.isWin
+                                            ? '0 8px 32px rgba(16, 185, 129, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
+                                            : '0 8px 32px rgba(239, 68, 68, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+                                        position: 'relative',
+                                        overflow: 'hidden',
                                         width: '100%',
-                                        maxWidth: '360px'
+                                        maxWidth: '400px'
                                     }}
                                 >
-                                    {/* Header */}
+                                    {/* Glow Effect Background */}
                                     <div style={{
-                                        textAlign: 'center',
-                                        marginBottom: '16px',
-                                        fontSize: '0.75rem',
-                                        color: 'rgba(255,255,255,0.6)',
-                                        fontWeight: 800,
-                                        letterSpacing: '2px',
-                                        textTransform: 'uppercase'
-                                    }}>
-                                        {rewardData.isWin ? '🎉 TRANSFERENCIA RECIBIDA' : '📤 TRANSFERENCIA ENVIADA'}
-                                    </div>
+                                        position: 'absolute',
+                                        top: '50%',
+                                        left: '50%',
+                                        transform: 'translate(-50%, -50%)',
+                                        width: '200px',
+                                        height: '200px',
+                                        background: rewardData.isWin
+                                            ? 'radial-gradient(circle, rgba(16, 185, 129, 0.2) 0%, transparent 70%)'
+                                            : 'radial-gradient(circle, rgba(239, 68, 68, 0.2) 0%, transparent 70%)',
+                                        filter: 'blur(40px)',
+                                        pointerEvents: 'none'
+                                    }} />
+
+                                    {/* Header with Icon */}
+                                    <motion.div
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+                                        style={{
+                                            textAlign: 'center',
+                                            marginBottom: '20px',
+                                            position: 'relative',
+                                            zIndex: 1
+                                        }}
+                                    >
+                                        <div style={{
+                                            fontSize: '2.5rem',
+                                            marginBottom: '8px',
+                                            filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))'
+                                        }}>
+                                            {rewardData.isWin ? '🎉' : '💸'}
+                                        </div>
+                                        <div style={{
+                                            fontSize: '1rem',
+                                            fontWeight: 800,
+                                            letterSpacing: '2px',
+                                            textTransform: 'uppercase',
+                                            background: rewardData.isWin
+                                                ? 'linear-gradient(to right, #10b981, #34d399)'
+                                                : 'linear-gradient(to right, #ef4444, #f87171)',
+                                            WebkitBackgroundClip: 'text',
+                                            WebkitTextFillColor: 'transparent',
+                                            backgroundClip: 'text'
+                                        }}>
+                                            {rewardData.isWin ? 'TRANSFERENCIA RECIBIDA' : 'TRANSFERENCIA ENVIADA'}
+                                        </div>
+                                    </motion.div>
 
                                     {/* Player Labels */}
                                     <div style={{
                                         display: 'flex',
                                         justifyContent: 'space-between',
-                                        marginBottom: '10px',
-                                        fontSize: '0.7rem',
+                                        marginBottom: '15px',
+                                        fontSize: '0.8rem',
                                         fontWeight: 800,
-                                        textTransform: 'uppercase'
+                                        letterSpacing: '1px',
+                                        position: 'relative',
+                                        zIndex: 1
                                     }}>
-                                        <div style={{ color: rewardData.isWin ? '#ff6b6b' : '#51cf66' }}>
+                                        <motion.div
+                                            initial={{ x: -20, opacity: 0 }}
+                                            animate={{ x: 0, opacity: 1 }}
+                                            transition={{ delay: 0.3 }}
+                                            style={{
+                                                color: rewardData.isWin ? 'rgba(239, 68, 68, 0.9)' : 'rgba(16, 185, 129, 0.9)',
+                                                padding: '4px 12px',
+                                                background: rewardData.isWin ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                                borderRadius: '8px',
+                                                border: `1px solid ${rewardData.isWin ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`
+                                            }}
+                                        >
                                             {rewardData.isWin ? 'OPONENTE' : 'TÚ'}
-                                        </div>
-                                        <div style={{ color: rewardData.isWin ? '#51cf66' : '#ff6b6b' }}>
+                                        </motion.div>
+                                        <motion.div
+                                            initial={{ x: 20, opacity: 0 }}
+                                            animate={{ x: 0, opacity: 1 }}
+                                            transition={{ delay: 0.3 }}
+                                            style={{
+                                                color: rewardData.isWin ? 'rgba(16, 185, 129, 0.9)' : 'rgba(239, 68, 68, 0.9)',
+                                                padding: '4px 12px',
+                                                background: rewardData.isWin ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                                borderRadius: '8px',
+                                                border: `1px solid ${rewardData.isWin ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`
+                                            }}
+                                        >
                                             {rewardData.isWin ? 'TÚ' : 'OPONENTE'}
-                                        </div>
+                                        </motion.div>
                                     </div>
 
-                                    {/* Premium Progress Track */}
-                                    <div style={{
-                                        position: 'relative',
-                                        height: '60px',
-                                        background: 'rgba(0, 0, 0, 0.4)',
-                                        borderRadius: '30px',
-                                        overflow: 'hidden',
-                                        border: '2px solid rgba(255,255,255,0.08)',
-                                        boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.3)'
-                                    }}>
-                                        {/* Animated Gradient Fill */}
+                                    {/* Enhanced Progress Bar */}
+                                    <div
+                                        style={{
+                                            position: 'relative',
+                                            height: '60px',
+                                            background: 'rgba(0, 0, 0, 0.3)',
+                                            borderRadius: '30px',
+                                            overflow: 'hidden',
+                                            border: '2px solid rgba(255, 255, 255, 0.1)',
+                                            boxShadow: 'inset 0 2px 8px rgba(0, 0, 0, 0.3)',
+                                            marginBottom: '20px',
+                                            zIndex: 1
+                                        }}
+                                    >
+                                        {/* Animated Fill Bar */}
                                         <motion.div
                                             initial={{ width: '0%' }}
                                             animate={{ width: '100%' }}
@@ -1344,7 +1415,7 @@ export default function Home() {
                                                 duration: 2.5,
                                                 ease: 'easeInOut',
                                                 repeat: Infinity,
-                                                repeatDelay: 0.5
+                                                repeatDelay: 0.3
                                             }}
                                             style={{
                                                 position: 'absolute',
@@ -1352,47 +1423,64 @@ export default function Home() {
                                                 left: 0,
                                                 height: '100%',
                                                 background: rewardData.isWin
-                                                    ? 'linear-gradient(90deg, rgba(0,255,136,0.2), rgba(0,255,136,0.5))'
-                                                    : 'linear-gradient(90deg, rgba(255,68,102,0.2), rgba(255,68,102,0.5))',
-                                                transformOrigin: 'left'
+                                                    ? 'linear-gradient(90deg, rgba(16, 185, 129, 0.4), rgba(16, 185, 129, 0.7), rgba(5, 150, 105, 0.5))'
+                                                    : 'linear-gradient(90deg, rgba(239, 68, 68, 0.4), rgba(239, 68, 68, 0.7), rgba(220, 38, 38, 0.5))',
+                                                boxShadow: rewardData.isWin
+                                                    ? '0 0 20px rgba(16, 185, 129, 0.4)'
+                                                    : '0 0 20px rgba(239, 68, 68, 0.4)'
                                             }}
                                         />
 
-                                        {/* Flowing Icons - ALWAYS Left to Right */}
+                                        {/* Shimmer Effect */}
+                                        <motion.div
+                                            animate={{
+                                                x: ['-100%', '200%']
+                                            }}
+                                            transition={{
+                                                duration: 2,
+                                                repeat: Infinity,
+                                                ease: 'linear'
+                                            }}
+                                            style={{
+                                                position: 'absolute',
+                                                top: 0,
+                                                left: 0,
+                                                height: '100%',
+                                                width: '30%',
+                                                background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent)',
+                                                pointerEvents: 'none'
+                                            }}
+                                        />
+
+                                        {/* Flowing Icons */}
                                         <div style={{
                                             position: 'absolute',
-                                            top: 0,
-                                            left: 0,
-                                            right: 0,
-                                            bottom: 0,
+                                            inset: 0,
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
                                             pointerEvents: 'none'
                                         }}>
-                                            {[...Array(4)].map((_, i) => (
+                                            {[...Array(5)].map((_, i) => (
                                                 <motion.div
                                                     key={i}
-                                                    initial={{
-                                                        x: '-100%',
-                                                        opacity: 0
-                                                    }}
+                                                    initial={{ x: '-150%', opacity: 0, scale: 0.8 }}
                                                     animate={{
-                                                        x: '100%',
-                                                        opacity: [0, 1, 1, 0]
+                                                        x: '150%',
+                                                        opacity: [0, 1, 1, 1, 0],
+                                                        scale: [0.8, 1.2, 1, 1, 0.8]
                                                     }}
                                                     transition={{
-                                                        duration: 1.8,
-                                                        delay: i * 0.3,
+                                                        duration: 2.2,
+                                                        delay: i * 0.25,
                                                         repeat: Infinity,
-                                                        repeatDelay: 0.2,
-                                                        ease: 'linear'
+                                                        repeatDelay: 0.1,
+                                                        ease: 'easeInOut'
                                                     }}
                                                     style={{
                                                         position: 'absolute',
-                                                        fontSize: '1.5rem',
-                                                        left: 0,
-                                                        right: 'auto'
+                                                        fontSize: '1.8rem',
+                                                        filter: 'drop-shadow(0 2px 6px rgba(0, 0, 0, 0.3))'
                                                     }}
                                                 >
                                                     {rewardData.type === 'rp' ? '⭐' : rewardData.type === 'gems' ? '💎' : '🪙'}
@@ -1400,13 +1488,17 @@ export default function Home() {
                                             ))}
                                         </div>
 
-                                        {/* Premium Arrow */}
+                                        {/* Center Arrow with Pulse */}
                                         <motion.div
                                             animate={{
-                                                scale: [1, 1.15, 1],
+                                                scale: [1, 1.3, 1],
                                                 x: [0, 8, 0]
                                             }}
-                                            transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+                                            transition={{
+                                                duration: 1.2,
+                                                repeat: Infinity,
+                                                ease: 'easeInOut'
+                                            }}
                                             style={{
                                                 position: 'absolute',
                                                 top: '50%',
@@ -1414,48 +1506,71 @@ export default function Home() {
                                                 transform: 'translate(-50%, -50%)',
                                                 fontSize: '2rem',
                                                 fontWeight: 900,
-                                                color: rewardData.isWin ? '#00ff88' : '#ff4466',
-                                                textShadow: `0 0 20px ${rewardData.isWin ? '#00ff88' : '#ff4466'}`,
-                                                filter: 'drop-shadow(0 0 10px currentColor)',
-                                                zIndex: 3
+                                                color: rewardData.isWin ? '#10b981' : '#ef4444',
+                                                textShadow: `0 0 20px ${rewardData.isWin ? '#10b981' : '#ef4444'}, 0 0 40px ${rewardData.isWin ? '#10b981' : '#ef4444'}`,
+                                                zIndex: 3,
+                                                filter: 'drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4))'
                                             }}
                                         >
                                             →
                                         </motion.div>
                                     </div>
 
-                                    {/* Premium Amount Display */}
+                                    {/* Amount Display - Enhanced */}
                                     <motion.div
-                                        initial={{ scale: 0.8, opacity: 0 }}
-                                        animate={{ scale: 1, opacity: 1 }}
-                                        transition={{ delay: 0.3, type: 'spring', stiffness: 200 }}
+                                        initial={{ scale: 0, y: 20 }}
+                                        animate={{ scale: 1, y: 0 }}
+                                        transition={{ delay: 0.6, type: 'spring', stiffness: 150 }}
                                         style={{
-                                            marginTop: '16px',
-                                            textAlign: 'center',
-                                            padding: '12px',
+                                            padding: '16px 24px',
                                             background: rewardData.isWin
-                                                ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.08), rgba(0, 255, 136, 0.12))'
-                                                : 'linear-gradient(135deg, rgba(255, 68, 102, 0.08), rgba(255, 68, 102, 0.12))',
-                                            borderRadius: '12px',
-                                            border: `1px solid ${rewardData.isWin ? 'rgba(0, 255, 136, 0.2)' : 'rgba(255, 68, 102, 0.2)'}`
+                                                ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.2))'
+                                                : 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(220, 38, 38, 0.2))',
+                                            borderRadius: '16px',
+                                            border: `2px solid ${rewardData.isWin ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+                                            textAlign: 'center',
+                                            position: 'relative',
+                                            zIndex: 1,
+                                            boxShadow: rewardData.isWin
+                                                ? '0 4px 16px rgba(16, 185, 129, 0.2)'
+                                                : '0 4px 16px rgba(239, 68, 68, 0.2)'
                                         }}
                                     >
+                                        <motion.div
+                                            animate={{
+                                                scale: [1, 1.05, 1],
+                                            }}
+                                            transition={{
+                                                duration: 2,
+                                                repeat: Infinity,
+                                                ease: 'easeInOut'
+                                            }}
+                                            style={{
+                                                fontSize: '2rem',
+                                                fontWeight: 900,
+                                                letterSpacing: '1px',
+                                                background: rewardData.isWin
+                                                    ? 'linear-gradient(to right, #10b981, #34d399, #6ee7b7)'
+                                                    : 'linear-gradient(to right, #ef4444, #f87171, #fca5a5)',
+                                                WebkitBackgroundClip: 'text',
+                                                WebkitTextFillColor: 'transparent',
+                                                backgroundClip: 'text',
+                                                filter: `drop-shadow(0 0 12px ${rewardData.isWin ? '#10b981' : '#ef4444'})`,
+                                                lineHeight: 1.2
+                                            }}
+                                        >
+                                            {rewardData.isWin ? '+' : '-'}{Math.abs(rewardData.amount)}
+                                            <span style={{ marginLeft: '8px' }}>
+                                                {rewardData.type === 'coins' ? '🪙' : rewardData.type === 'gems' ? '💎' : '⭐'}
+                                            </span>
+                                        </motion.div>
                                         <div style={{
-                                            fontSize: '1.8rem',
-                                            fontWeight: 900,
-                                            color: rewardData.isWin ? '#00ff88' : '#ff4466',
-                                            textShadow: `0 0 20px ${rewardData.isWin ? '#00ff88' : '#ff4466'}`,
-                                            letterSpacing: '-1px'
-                                        }}>
-                                            {rewardData.isWin ? '+' : '-'}{Math.abs(rewardData.amount)} {rewardData.type.toUpperCase()}
-                                        </div>
-                                        <div style={{
-                                            fontSize: '0.7rem',
-                                            color: 'rgba(255,255,255,0.5)',
-                                            marginTop: '6px',
+                                            fontSize: '0.85rem',
+                                            color: 'rgba(255, 255, 255, 0.7)',
+                                            marginTop: '8px',
                                             fontWeight: 600,
-                                            textTransform: 'uppercase',
-                                            letterSpacing: '1px'
+                                            letterSpacing: '1px',
+                                            textTransform: 'uppercase'
                                         }}>
                                             {rewardData.type === 'coins' ? 'Monedas' : rewardData.type === 'gems' ? 'Gemas' : 'Puntos de Rango'}
                                         </div>
