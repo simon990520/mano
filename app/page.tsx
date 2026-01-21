@@ -1268,21 +1268,20 @@ export default function Home() {
                             </p>
                             <div className="game-over-buttons">
                                 <button
-                                    className="btn-primary"
+                                    className="game-action-btn active"
                                     onClick={handleRequestRematch}
                                     disabled={rematchRequested || rematchStatus === 'Opponent disconnected!'}
                                 >
                                     {rematchRequested ? 'WAITING...' : 'REMATCH'}
                                 </button>
                                 <button
-                                    className="btn-secondary"
+                                    className="game-action-btn"
                                     onClick={handlePlayAgain}
                                 >
                                     START
                                 </button>
                                 <button
-                                    className="btn-secondary"
-                                    style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                                    className="game-action-btn"
                                     onClick={() => {
                                         setGameState('lobby');
                                         setRematchStatus('');
