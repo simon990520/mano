@@ -7,7 +7,8 @@ export const useGameController = (
     socket: Socket | null,
     user: any,
     playSound: (path: string) => void,
-    checkProfile: () => void
+    checkProfile: () => void,
+    onGameOverUpdate: (data: GameOverData) => void
 ) => {
     // Game State
     const [gameState, setGameState] = useState<GameState>('lobby');
@@ -128,6 +129,9 @@ export const useGameController = (
             setGameWinner(data.winner);
             setGameState('gameOver');
 
+            // Trigger Economy Update
+            onGameOverUpdate(data);
+
             if (data.prize || data.rpChange || (data.mode === 'casual' && data.stake)) {
                 const isWinner = data.winner === 'player';
                 let rewardType: 'coins' | 'gems' | 'rp' = 'coins';
@@ -210,7 +214,7 @@ export const useGameController = (
             socket.off('opponentDisconnected');
             socket.off('opponentLeft');
         };
-    }, [socket, isSignedIn]); // Added isSignedIn but mostly depends on socket presence.
+    }, [socket, isSignedIn]);
 
     // Action Handlers
     const handleFindMatch = () => {

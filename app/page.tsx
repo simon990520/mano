@@ -38,7 +38,13 @@ export default function Home() {
         gameState,
         actions: gameActions,
         ...gameData
-    } = useGameController(socket, user, playSound, economyActions.checkProfile);
+    } = useGameController(
+        socket,
+        user,
+        playSound,
+        economyActions.checkProfile,
+        economyActions.handleGameOverUpdate // INJECTED: Handle economy updates from game results
+    );
 
     // 5. Background Music Logic
     const { isMuted, musicVolume } = volumeStates;

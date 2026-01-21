@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/app/services/supabase';
 import { Socket } from 'socket.io-client';
+import type { GameOverData } from '@/lib/types';
 
 export const useEconomyController = (isSignedIn: boolean | undefined, user: any, socket: Socket | null, playSound: (path: string) => void) => {
     const [coins, setCoins] = useState<number>(0);
@@ -61,9 +62,6 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
 
         const onProfileUpdated = () => {
             setShowOnboarding(false);
-            // We can emit a celebration event or callback here if we want the controller to handle it,
-            // but for now we'll leave visual effects to the view or a separate coordinator.
-            // Actually, the page.tsx had confetti here. We might want to expose a "profileUpdated" flag or event.
         };
 
         const onProfileUpdateError = (msg: string) => {
@@ -112,6 +110,14 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
         }
     };
 
+    // Helper to update economy from Game Over data
+    const handleGameOverUpdate = (data: GameOverData) => {
+        if (data.newRp !== undefined) setRp(data.newRp);
+        if (data.newRank) setRankName(data.newRank);
+        if (data.newCoins !== undefined) setCoins(data.newCoins);
+        if (data.newGems !== undefined) setGems(data.newGems);
+    }
+
     return {
         economyState: {
             coins,
@@ -136,7 +142,8 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             setBirthDate,
             handlePurchase,
             handleSaveProfile,
-            checkProfile
+            checkProfile,
+            handleGameOverUpdate
         }
     };
 };
