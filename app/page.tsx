@@ -1124,7 +1124,7 @@ export default function Home() {
                                     </button>
                                 </div>
 
-                                <div className="mode-display-container">
+                                <div className="mode-display-container" style={{ display: 'block' }}>
                                     <div className="arena-selector" style={{ marginTop: '0' }}>
                                         <p className="arena-label">
                                             {gameMode === 'casual' ? 'ELIGE TU ARENA (COINS)' : 'ELIGE TU ARENA (GEMS)'}
@@ -1132,15 +1132,7 @@ export default function Home() {
 
                                         {gameMode === 'ranked' && (
                                             <div className="ranked-banner" style={{
-                                                background: 'rgba(0, 0, 0, 0.4)',
-                                                borderRadius: '20px',
-                                                padding: '12px 20px',
-                                                marginBottom: '15px',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'space-between',
                                                 border: `1px solid ${RANKS.find(r => r.id === rankName)?.color}44`,
-                                                width: '100%',
                                                 boxShadow: `0 4px 15px rgba(0,0,0,0.3), inset 0 0 10px ${RANKS.find(r => r.id === rankName)?.color}22`
                                             } as any}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1274,37 +1266,23 @@ export default function Home() {
                             }}>
                                 Play this opponent again?
                             </p>
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-                                gap: '12px',
-                                width: '100%',
-                                maxWidth: '500px',
-                                marginBottom: '20px'
-                            }}>
+                            <div className="game-over-buttons">
                                 <button
                                     className="btn-primary"
                                     onClick={handleRequestRematch}
                                     disabled={rematchRequested || rematchStatus === 'Opponent disconnected!'}
-                                    style={{ minHeight: '52px', fontSize: '1rem', padding: '10px' }}
                                 >
                                     {rematchRequested ? 'WAITING...' : 'REMATCH'}
                                 </button>
                                 <button
                                     className="btn-secondary"
                                     onClick={handlePlayAgain}
-                                    style={{ minHeight: '52px', fontSize: '1rem', padding: '10px' }}
                                 >
                                     START
                                 </button>
                                 <button
                                     className="btn-secondary"
-                                    style={{
-                                        background: 'rgba(255, 255, 255, 0.1)',
-                                        minHeight: '52px',
-                                        fontSize: '1rem',
-                                        padding: '10px'
-                                    }}
+                                    style={{ background: 'rgba(255, 255, 255, 0.1)' }}
                                     onClick={() => {
                                         setGameState('lobby');
                                         setRematchStatus('');

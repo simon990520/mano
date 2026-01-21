@@ -1455,11 +1455,13 @@ body {
 @media (max-width: 600px) {
   .arena-grid {
     grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    gap: 10px;
+    width: 100%;
   }
 
   .arena-selector {
-    padding: 0 10px;
+    padding: 0;
+    width: 100%;
   }
 
   .arena-label {
@@ -1536,6 +1538,15 @@ body {
     padding: 12px 30px !important;
     font-size: 1rem !important;
     margin-top: 10px !important;
+  }
+
+  .game-over-buttons {
+    grid-template-columns: 1fr !important;
+  }
+
+  .ranked-banner {
+    flex-direction: row;
+    padding: 10px 15px !important;
   }
 }
 
@@ -1639,6 +1650,30 @@ body {
   color: white;
   opacity: 0.9;
   font-weight: 700;
+}
+
+.ranked-banner {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 20px;
+  padding: 12px 20px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  position: relative;
+  z-index: 10;
+}
+
+.game-over-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  width: 100%;
+  max-width: 500px;
+  margin-bottom: 20px;
 }
 
 .ranked-stake {
