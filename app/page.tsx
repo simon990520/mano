@@ -98,6 +98,14 @@ export default function Home() {
         { id: 500, name: 'ELITE', icon: '💎', color: '#2196f3', entry: 500, prize: 1000 },
         { id: 1000, name: 'LEYENDA', icon: '👑', color: '#e91e63', entry: 1000, prize: 2000 }
     ];
+
+    const RANKED_ARENAS = [
+        { id: 10, name: 'NOVATO', icon: '🪙', color: '#4caf50', entry: 10, prize: 20 },
+        { id: 100, name: 'AVANZADO', icon: '🔥', color: '#ff9800', entry: 100, prize: 200 },
+        { id: 500, name: 'ELITE', icon: '💎', color: '#2196f3', entry: 500, prize: 1000 },
+        { id: 1000, name: 'LEYENDA', icon: '👑', color: '#e91e63', entry: 1000, prize: 2000 }
+    ];
+
     const [selectedStake, setSelectedStake] = useState(10);
     const [currentMatchStake, setCurrentMatchStake] = useState<number | null>(null);
 
@@ -1117,36 +1125,35 @@ export default function Home() {
                                 </div>
 
                                 <div className="mode-display-container">
-                                    {gameMode === 'casual' ? (
-                                        <div className="arena-selector">
-                                            <p className="arena-label">ELIGE TU ARENA</p>
-                                            <div className="arena-grid">
-                                                {ARENAS.map((arena) => (
-                                                    <div
-                                                        key={arena.id}
-                                                        className={`arena-card ${selectedStake === arena.id ? 'active' : ''}`}
-                                                        style={{ '--arena-color': arena.color } as any}
-                                                        onClick={() => {
-                                                            setSelectedStake(arena.id);
-                                                            playSound('/sounds/sfx/click.mp3');
-                                                        }}
-                                                    >
-                                                        <div className="arena-icon">{arena.icon}</div>
-                                                        <div className="arena-name">{arena.name}</div>
-                                                        <div className="arena-entry">{arena.entry} 🪙</div>
-                                                    </div>
-                                                ))}
-                                            </div>
+                                    <div className="arena-selector">
+                                        <p className="arena-label">
+                                            {gameMode === 'casual' ? 'ELIGE TU ARENA (COINS)' : 'ELIGE TU ARENA (GEMS)'}
+                                        </p>
+                                        <div className="arena-grid">
+                                            {(gameMode === 'casual' ? ARENAS : RANKED_ARENAS).map((arena) => (
+                                                <div
+                                                    key={arena.id}
+                                                    className={`arena-card ${selectedStake === arena.id ? 'active' : ''}`}
+                                                    style={{ '--arena-color': arena.color } as any}
+                                                    onClick={() => {
+                                                        setSelectedStake(arena.id);
+                                                        playSound('/sounds/sfx/click.mp3');
+                                                    }}
+                                                >
+                                                    <div className="arena-icon">{arena.icon}</div>
+                                                    <div className="arena-name">{arena.name}</div>
+                                                    <div className="arena-entry">{arena.entry} {gameMode === 'casual' ? '🪙' : '💎'}</div>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ) : (
-                                        <div className="arena-selector ranked-area">
-                                            <p className="arena-label">DUELO DE RANGO</p>
-                                            <div className="ranked-card" style={{ '--rank-color': RANKS.find(r => r.id === rankName)?.color } as any}>
+                                    </div>
+
+                                    {gameMode === 'ranked' && (
+                                        <div className="ranked-area" style={{ marginTop: '20px' }}>
+                                            <div className="ranked-card small" style={{ '--rank-color': RANKS.find(r => r.id === rankName)?.color } as any}>
                                                 <div className="ranked-badge">{RANKS.find(r => r.id === rankName)?.icon}</div>
                                                 <div className="ranked-info">
-                                                    <div className="ranked-name">{rankName}</div>
-                                                    <div className="ranked-rp">{rp} RP</div>
-                                                    <div className="ranked-stake">Costo: {RANKS.find(r => r.id === rankName)?.stake} 💎</div>
+                                                    <div className="ranked-name">{rankName} - {rp} RP</div>
                                                 </div>
                                                 <div className="rp-progress-bg">
                                                     <div className="rp-progress-fill" style={{
@@ -1240,20 +1247,37 @@ export default function Home() {
                             }}>
                                 Play this opponent again?
                             </p>
-                            <div style={{ display: 'flex', gap: '12px', width: '100%', maxWidth: '400px', marginBottom: '20px' }}>
+                            <div style={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                gap: '12px',
+                                width: '100%',
+                                maxWidth: '500px',
+                                marginBottom: '20px',
+                                justifyContent: 'center'
+                            }}>
                                 <button
                                     className="btn-primary"
                                     onClick={handleRequestRematch}
                                     disabled={rematchRequested || rematchStatus === 'Opponent disconnected!'}
+                                    style={{ flex: '1 1 120px', minHeight: '50px' }}
                                 >
                                     {rematchRequested ? 'WAITING...' : 'REMATCH'}
                                 </button>
-                                <button className="btn-secondary" onClick={handlePlayAgain}>
+                                <button
+                                    className="btn-secondary"
+                                    onClick={handlePlayAgain}
+                                    style={{ flex: '1 1 120px', minHeight: '50px' }}
+                                >
                                     START
                                 </button>
                                 <button
                                     className="btn-secondary"
-                                    style={{ background: 'rgba(255, 255, 255, 0.1)' }}
+                                    style={{
+                                        background: 'rgba(255, 255, 255, 0.1)',
+                                        flex: '1 1 120px',
+                                        minHeight: '50px'
+                                    }}
                                     onClick={() => {
                                         setGameState('lobby');
                                         setRematchStatus('');
