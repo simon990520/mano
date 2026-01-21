@@ -249,9 +249,10 @@ app.prepare().then(() => {
                 }
             } else {
                 currentRank = getRankByRp(profile.rp || 0);
-                currentStake = RANK_CONFIG[currentRank].stake;
+                // Use the stakeTier from the arena selected by the user
+                currentStake = stakeTier;
                 if (profile.gems < currentStake) {
-                    socket.emit('matchError', `Necesitas ${currentStake} gemas para jugar en el rango ${currentRank}.`);
+                    socket.emit('matchError', `Necesitas ${currentStake} gemas para jugar en esta Arena.`);
                     return;
                 }
             }
@@ -729,7 +730,17 @@ app.prepare().then(() => {
 
                 // Handle Ranked Mode
                 if (room.mode === 'ranked') {
-                    const rpChange = isWinner ? 20 : -15;
+                    // Scale RP based on arena stake
+                    // Base (10 gems): +20/-15
+                    // Tier 2 (100 gems): +40/-30
+                    // Tier 3 (500 gems): +100/-75
+                    // Tier 4 (1000 gems): +200/-150
+                    let multiplier = 1;
+                    if (room.stakeTier >= 1000) multiplier = 10;
+                    else if (room.stakeTier >= 500) multiplier = 5;
+                    else if (room.stakeTier >= 100) multiplier = 2;
+
+                    const rpChange = isWinner ? (20 * multiplier) : -(15 * multiplier);
                     const newRp = Math.max(0, (profile.rp || 0) + rpChange);
                     const newRank = getRankByRp(newRp);
 
