@@ -533,12 +533,12 @@ export default function Home() {
                     let rewardAmount = 0;
 
                     if (data.mode === 'ranked') {
+                        // Ranked Mode: Winner gets prize (gems), Loser loses stake (gems)
+                        rewardType = 'gems';
                         if (isWinner) {
-                            rewardType = 'gems';
                             rewardAmount = data.prize || 0;
                         } else {
-                            rewardType = 'rp';
-                            rewardAmount = data.rpChange || 0;
+                            rewardAmount = -(data.stake || 0);
                         }
                     } else {
                         // Casual mode
@@ -1125,7 +1125,50 @@ export default function Home() {
                                 </div>
 
                                 <div className="mode-display-container">
-                                    <div className="arena-selector">
+                                    {gameMode === 'ranked' && (
+                                        <div className="ranked-banner" style={{
+                                            background: 'rgba(0, 0, 0, 0.4)',
+                                            borderRadius: '20px',
+                                            padding: '12px 20px',
+                                            marginBottom: '15px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            border: `1px solid ${RANKS.find(r => r.id === rankName)?.color}44`,
+                                            width: '100%',
+                                            maxWidth: '500px',
+                                            boxShadow: `0 4px 15px rgba(0,0,0,0.3), inset 0 0 10px ${RANKS.find(r => r.id === rankName)?.color}22`
+                                        } as any}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                <div style={{ fontSize: '2.5rem', filter: `drop-shadow(0 0 10px ${RANKS.find(r => r.id === rankName)?.color})` }}>
+                                                    {RANKS.find(r => r.id === rankName)?.icon}
+                                                </div>
+                                                <div style={{ textAlign: 'left' }}>
+                                                    <div style={{
+                                                        fontSize: '1.1rem',
+                                                        fontWeight: 900,
+                                                        color: RANKS.find(r => r.id === rankName)?.color,
+                                                        textTransform: 'uppercase',
+                                                        letterSpacing: '1px'
+                                                    }}>{rankName}</div>
+                                                    <div style={{ fontSize: '0.9rem', opacity: 0.8, fontWeight: 700 }}>{rp} RP</div>
+                                                </div>
+                                            </div>
+                                            <div style={{ width: '40%', maxWidth: '150px' }}>
+                                                <div className="rp-progress-bg" style={{ height: '6px', marginTop: '0', background: 'rgba(255,255,255,0.05)' }}>
+                                                    <div className="rp-progress-fill" style={{
+                                                        width: `${Math.min(100, ((rp - (RANKS.find(r => r.id === rankName)?.minRp || 0)) / ((RANKS.find(r => r.id === rankName)?.maxRp || 1) - (RANKS.find(r => r.id === rankName)?.minRp || 0))) * 100)}%`,
+                                                        boxShadow: `0 0 10px ${RANKS.find(r => r.id === rankName)?.color}`
+                                                    }}></div>
+                                                </div>
+                                                <div style={{ fontSize: '0.65rem', textAlign: 'right', marginTop: '4px', opacity: 0.5, fontWeight: 700 }}>
+                                                    NEXT RANK: {RANKS.find(r => r.minRp > rp)?.name || 'MAX'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="arena-selector" style={{ marginTop: '0' }}>
                                         <p className="arena-label">
                                             {gameMode === 'casual' ? 'ELIGE TU ARENA (COINS)' : 'ELIGE TU ARENA (GEMS)'}
                                         </p>
@@ -1147,22 +1190,6 @@ export default function Home() {
                                             ))}
                                         </div>
                                     </div>
-
-                                    {gameMode === 'ranked' && (
-                                        <div className="ranked-area" style={{ marginTop: '20px' }}>
-                                            <div className="ranked-card small" style={{ '--rank-color': RANKS.find(r => r.id === rankName)?.color } as any}>
-                                                <div className="ranked-badge">{RANKS.find(r => r.id === rankName)?.icon}</div>
-                                                <div className="ranked-info">
-                                                    <div className="ranked-name">{rankName} - {rp} RP</div>
-                                                </div>
-                                                <div className="rp-progress-bg">
-                                                    <div className="rp-progress-fill" style={{
-                                                        width: `${Math.min(100, ((rp - (RANKS.find(r => r.id === rankName)?.minRp || 0)) / ((RANKS.find(r => r.id === rankName)?.maxRp || 1) - (RANKS.find(r => r.id === rankName)?.minRp || 0))) * 100)}%`
-                                                    }}></div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
 
                                 <button
