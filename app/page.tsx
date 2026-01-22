@@ -242,6 +242,8 @@ export default function Home() {
                         handleOpenStats(id, img);
                     }}
                     opponentId={gameData.opponentId}
+                    isOpponentDisconnected={gameData.isOpponentDisconnected}
+                    reconnectTimer={gameData.reconnectTimer}
                 />
             )}
 

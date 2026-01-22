@@ -620,29 +620,147 @@ app.prepare().then(() => {
         }
     });
 
+    // Helper functions for game loop
+    function startCountdown(roomId) {
+        const room = findRoomById(roomId);
+        if (!room) return;
+
+        room.state = 'countdown';
+        room.countdown = 3;
+
+        const interval = setInterval(() => {
+            io.to(room.id).emit('countdown', room.countdown);
+            if (room.countdown === 0) {
+                clearInterval(interval);
+                startRound(room);
+            }
+            room.countdown--;
+        }, 1000);
+    }
+
+    function startRound(room) {
+        if (!room || room.state === 'gameOver') return;
+
+        room.state = 'playing';
+        room.players.forEach(p => p.choice = null);
+        room.turnTimer = 3; // 3 seconds to choose
+
+        io.to(room.id).emit('roundStart', room.round);
+        io.to(room.id).emit('timer', room.turnTimer);
+
+        if (room.turnTimerInterval) clearInterval(room.turnTimerInterval);
+
+        room.turnTimerInterval = setInterval(() => {
+            room.turnTimer--;
+            io.to(room.id).emit('timer', room.turnTimer);
+
+            if (room.turnTimer <= 0) {
+                clearInterval(room.turnTimerInterval);
+                room.turnTimerInterval = null;
+                handleRoundTimeout(room);
+            }
+        }, 1000);
+    }
+
+    function handleRoundTimeout(room) {
+        if (!room || room.state !== 'playing') return;
+
+        console.log(`[SERVER_GAME] Round ${room.round} timeout in room ${room.id}. Checking choices.`);
+
+        const p1 = room.players[0];
+        const p2 = room.players[1];
+
+        if (!p1.choice && !p2.choice) {
+            // Both inactive
+            room.inactivityTies = (room.inactivityTies || 0) + 1;
+            console.log(`[SERVER_GAME] Both players inactive. Inactivity count: ${room.inactivityTies}`);
+
+            if (room.inactivityTies >= 3) {
+                refundAndEndGame(room);
+                return;
+            }
+
+            // Auto-assign rock to both for a tie round result
+            p1.choice = 'rock';
+            p2.choice = 'rock';
+        } else if (p1.choice && !p2.choice) {
+            // P1 wins by forfeit
+            p2.choice = p1.choice === 'rock' ? 'scissors' : (p1.choice === 'paper' ? 'rock' : 'paper');
+            room.inactivityTies = 0; // Reset as someone active
+        } else if (!p1.choice && p2.choice) {
+            // P2 wins by forfeit
+            p1.choice = p2.choice === 'rock' ? 'scissors' : (p2.choice === 'paper' ? 'rock' : 'paper');
+            room.inactivityTies = 0; // Reset
+        } else {
+            // Both chose, should not happen in timeout but for safety
+            room.inactivityTies = 0;
+        }
+
+        resolveRound(room);
+    }
+
+    function findRoomById(roomId) {
+        for (const room of activeRooms.values()) {
+            if (room.id === roomId) return room;
+        }
+        return null;
+    }
+
     // ... (rest of helper functions, make sure endGame is robust)
 
+    async function refundAndEndGame(room) {
+        console.log(`[SERVER_GAME] Refund and End Game for room: ${room.id}`);
+        room.state = 'gameOver';
+        if (room.turnTimerInterval) clearInterval(room.turnTimerInterval);
+
+        const mode = room.mode || 'casual';
+        const stake = room.stakeTier || 0;
+        const currency = mode === 'casual' ? 'coins' : 'gems';
+
+        for (const player of room.players) {
+            try {
+                const { data: p } = await supabase.from('profiles').select(currency).eq('id', player.userId).single();
+                if (p) {
+                    await supabase.from('profiles').update({ [currency]: p[currency] + stake }).eq('id', player.userId);
+                    console.log(`[SERVER_ECONOMY] Refunded ${stake} ${currency} to ${player.userId}`);
+                }
+            } catch (e) {
+                console.error(`[SERVER_ECONOMY] Refund failed for ${player.userId}:`, e.message);
+            }
+        }
+
+        io.to(room.id).emit('matchError', 'Partida cancelada por inactividad. Se han devuelto las apuestas.');
+        setTimeout(() => {
+            room.players.forEach(p => activeRooms.delete(p.socketId));
+        }, 2000);
+    }
+
     async function resolveRound(room) {
-        if (room.roundTimeout) {
-            clearTimeout(room.roundTimeout);
-            room.roundTimeout = null;
+        if (room.turnTimerInterval) {
+            clearInterval(room.turnTimerInterval);
+            room.turnTimerInterval = null;
         }
 
         const [player1, player2] = room.players;
+
+        // Reset inactivity tiles if ANYONE manually chose (check before resolve)
+        // Note: handleRoundTimeout set auto-choices, so we should check real choices if possible,
+        // but handleRoundTimeout already handles resetting inactivityTies if someone chose.
+        // For resolveRound called by makeChoice:
+        if (player1.choice && player2.choice && room.turnTimer > 0) {
+            room.inactivityTies = 0;
+        }
+
         const result = determineWinner(player1.choice, player2.choice);
 
         // Update scores
         if (result === 'player1') player1.score++;
         else if (result === 'player2') player2.score++;
 
-        // ACCUMULATE STATS (Ranked Only Strategy, but valid to track for all)
-        // We track for everyone, but only SAVE if mode === 'ranked' later
+        // ACCUMULATE STATS
         if (room.stats && player1.choice && player2.choice) {
-            // Track choices
             room.stats[player1.userId][player1.choice]++;
             room.stats[player2.userId][player2.choice]++;
-
-            // Track Opening Moves (Round 1)
             if (room.round === 1) {
                 room.stats[player1.userId].openings[player1.choice]++;
                 room.stats[player2.userId].openings[player2.choice]++;
@@ -651,7 +769,32 @@ app.prepare().then(() => {
 
         room.state = 'roundResult';
 
-        // ... (emitting roundResult) ...
+        // Emit personalized results to each player
+        room.players.forEach((p, idx) => {
+            const oppIdx = idx === 0 ? 1 : 0;
+            const opp = room.players[oppIdx];
+
+            io.to(p.socketId).emit('roundResult', {
+                winner: result === 'tie' ? 'tie' : (result === `player${idx + 1}` ? 'player' : 'opponent'),
+                playerChoice: p.choice,
+                opponentChoice: opp.choice,
+                playerScore: p.score,
+                opponentScore: opp.score,
+                round: room.round
+            });
+        });
+
+        // Check if game is over (First to 3)
+        if (player1.score >= 3 || player2.score >= 3) {
+            setTimeout(() => {
+                endGame(room);
+            }, 3000);
+        } else {
+            room.round++;
+            setTimeout(() => {
+                startRound(room);
+            }, 4000);
+        }
     }
 
     // ... (handleRoundTimeout - similar updates if choice fell back to rock, or skip stats for timeouts?)

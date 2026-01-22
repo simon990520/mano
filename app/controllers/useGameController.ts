@@ -23,6 +23,8 @@ export const useGameController = (
     const [choiceMade, setChoiceMade] = useState(false);
     const [opponentImageUrl, setOpponentImageUrl] = useState<string | null>(null);
     const [opponentId, setOpponentId] = useState<string | null>(null);
+    const [isOpponentDisconnected, setIsOpponentDisconnected] = useState(false);
+    const [reconnectTimer, setReconnectTimer] = useState(10);
     const [showCollision, setShowCollision] = useState<boolean>(false);
 
     // Rematch states
@@ -37,7 +39,7 @@ export const useGameController = (
     const [gameMode, setGameMode] = useState<'casual' | 'ranked'>('casual');
     const [selectedStake, setSelectedStake] = useState(10);
     const [currentMatchStake, setCurrentMatchStake] = useState<number | null>(null);
-    const [turnTimer, setTurnTimer] = useState<number>(3);
+    const [turnTimer, setTurnTimer] = useState(3);
 
     const isSignedIn = !!user;
 
@@ -111,11 +113,15 @@ export const useGameController = (
             setOpponentChoice(null);
             setRoundWinner(null);
             setShowCollision(false);
-            setTurnTimer(3);
+            setTurnTimer(5);
             playSound('/sounds/sfx/fight.mp3');
         });
 
-        socket.on('roundResult', (result: RoundResult) => {
+        socket.on('timer', (time: number) => {
+            setTurnTimer(time);
+        });
+
+        socket.on('roundResult', (result: any) => {
             setPlayerChoice(result.playerChoice);
             setOpponentChoice(result.opponentChoice);
             setRoundWinner(result.winner);
@@ -201,11 +207,22 @@ export const useGameController = (
             }, 2000);
         });
 
-        socket.on('opponentDisconnected', () => {
-            console.warn('[GAME_STATUS] Opponent disconnected mid-game');
-            setGameState('gameOver');
+        socket.on('opponentDisconnected', (data: { timeout: number }) => {
+            console.warn('[GAME_STATUS] Opponent disconnected. Waiting...');
+            setIsOpponentDisconnected(true);
+            setReconnectTimer(Math.floor(data.timeout / 1000));
             setRematchStatus('Opponent disconnected!');
             setRematchRequested(false);
+        });
+
+        socket.on('opponentReconnected', () => {
+            console.log('[GAME_STATUS] Opponent reconnected!');
+            setIsOpponentDisconnected(false);
+        });
+
+        socket.on('reconnectSuccess', (data: any) => {
+            setGameState(data.state || 'playing');
+            // ... additional sync if needed
         });
 
         socket.on('opponentLeft', () => {
@@ -226,6 +243,8 @@ export const useGameController = (
             socket.off('rematchAccepted');
             socket.off('rematchDeclined');
             socket.off('opponentDisconnected');
+            socket.off('opponentReconnected');
+            socket.off('reconnectSuccess');
             socket.off('opponentLeft');
         };
     }, [socket, isSignedIn]);
@@ -320,6 +339,8 @@ export const useGameController = (
         gameWinner,
         opponentImageUrl,
         opponentId,
+        isOpponentDisconnected,
+        reconnectTimer,
         showCollision,
         rematch: { requested: rematchRequested, status: rematchStatus },
         reward: { show: showRewardAnim, data: rewardData },

@@ -19,6 +19,8 @@ interface GameArenaProps {
     countdown: number;
     onShowStats: (userId: string) => void;
     opponentId?: string | null;
+    isOpponentDisconnected?: boolean;
+    reconnectTimer?: number;
 }
 
 const CHOICE_EMOJIS = {
@@ -43,7 +45,9 @@ export const GameArena: React.FC<GameArenaProps> = ({
     gameMode,
     countdown,
     onShowStats,
-    opponentId
+    opponentId,
+    isOpponentDisconnected,
+    reconnectTimer
 }) => {
     return (
         <div className={`game-container ${(gameState === 'roundResult' && showCollision) ? 'shake' : ''}`}>
@@ -143,17 +147,25 @@ export const GameArena: React.FC<GameArenaProps> = ({
             )}
 
             {/* Reconnection Overlay - Simplified to use boolean or flag if available */}
-            {gameState === 'playing' && (
+            {isOpponentDisconnected && (
                 <div id="disconnection-overlay" style={{
                     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                    background: 'rgba(0,0,0,0.85)', zIndex: 9999,
-                    display: 'none', // Controlled by external logic or state if we add it
+                    background: 'rgba(0,0,0,0.9)', zIndex: 9999,
+                    display: 'flex',
                     flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    backdropFilter: 'blur(5px)'
+                    backdropFilter: 'blur(10px)',
+                    animation: 'fadeIn 0.3s ease-out'
                 }}>
-                    <div style={{ fontSize: '3rem', animation: 'pulse 1s infinite' }}>⚠️</div>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ff4444', marginTop: '10px' }}>OPPONENT DISCONNECTED</div>
-                    <div style={{ fontSize: '0.9rem', opacity: 0.8, marginTop: '5px' }}>Waiting for reconnection...</div>
+                    <div style={{ fontSize: '4rem', marginBottom: '20px' }}>⏳</div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#fff', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '2px' }}>
+                        Oponente Desconectado
+                    </div>
+                    <div style={{ fontSize: '3rem', fontWeight: 900, color: '#ff4444', marginTop: '20px', textShadow: '0 0 20px rgba(255,68,68,0.5)' }}>
+                        {reconnectTimer || 10}
+                    </div>
+                    <div style={{ fontSize: '1rem', opacity: 0.7, marginTop: '10px', color: '#fff' }}>
+                        Esperando reconexión...
+                    </div>
                 </div>
             )}
 
