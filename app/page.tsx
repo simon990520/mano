@@ -10,14 +10,14 @@ import { supabase } from '@/app/services/supabase';
 
 // Components
 import { Header } from '@/app/components/layout/Header';
-import { LobbyScreen } from '@/app/components/lobby/LobbyScreen';
-import { GameArena } from '@/app/components/game/GameArena';
-import { SettingsModal } from '@/app/components/modals/SettingsModal';
-import { ShopModal } from '@/app/components/modals/ShopModal';
-import { LeaderboardModal } from '@/app/components/modals/LeaderboardModal';
-import { OnboardingModal } from '@/app/components/modals/OnboardingModal';
-import { GameOverModal } from '@/app/components/modals/GameOverModal';
-import { PlayerStatsModal } from '@/app/components/modals/PlayerStatsModal';
+import { LobbyScreen } from '@/app/components/Lobby/LobbyScreen';
+import { GameArena } from '@/app/components/Game/GameArena';
+import { SettingsModal } from '@/app/components/Modals/SettingsModal';
+import { ShopModal } from '@/app/components/Modals/ShopModal';
+import { LeaderboardModal } from '@/app/components/Modals/LeaderboardModal';
+import { OnboardingModal } from '@/app/components/Modals/OnboardingModal';
+import { GameOverModal } from '@/app/components/Modals/GameOverModal';
+import { PlayerStatsModal } from '@/app/components/Modals/PlayerStatsModal';
 
 export default function Home() {
     const { user, isSignedIn } = useUser();

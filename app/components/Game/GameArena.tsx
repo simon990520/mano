@@ -57,7 +57,7 @@ export const GameArena: React.FC<GameArenaProps> = ({
                         </div>
                         <div
                             className="score-avatar clickable"
-                            onClick={() => onShowStats(user?.id)}
+                            onClick={() => user?.id && onShowStats(user.id)}
                             style={{ cursor: 'pointer', pointerEvents: 'auto', zIndex: 100 }}
                             title="Ver mis estadísticas"
                         >
