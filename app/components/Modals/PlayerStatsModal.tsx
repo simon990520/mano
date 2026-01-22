@@ -29,9 +29,23 @@ interface PlayerProfile {
     ranked_stats: RankedStats | null;
 }
 
+const RANKS = [
+    { id: 'BRONCE', name: 'BRONCE', icon: '🥉', color: '#cd7f32' },
+    { id: 'PLATA', name: 'PLATA', icon: '🥈', color: '#c0c0c0' },
+    { id: 'ORO', name: 'ORO', icon: '🥇', color: '#ffd700' },
+    { id: 'PLATINO', name: 'PLATINO', icon: '💠', color: '#e5e4e2' },
+    { id: 'DIAMANTE', name: 'DIAMANTE', icon: '💎', color: '#b9f2ff' },
+    { id: 'LEYENDA', name: 'LEYENDA', icon: '👑', color: '#ff00ff' }
+];
+
 export const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onClose, userId, socket }) => {
     const [stats, setStats] = useState<PlayerProfile | null>(null);
     const [loading, setLoading] = useState(true);
+
+    const currentRank = useMemo(() => {
+        if (!stats) return RANKS[0];
+        return RANKS.find(r => r.id === stats.rank_name) || RANKS[0];
+    }, [stats]);
 
     useEffect(() => {
         if (isOpen && userId && socket) {
@@ -59,6 +73,7 @@ export const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onCl
     const getFavoriteHand = () => {
         if (!stats?.ranked_stats) return '❓';
         const { rock, paper, scissors } = stats.ranked_stats;
+        if (rock === 0 && paper === 0 && scissors === 0) return '❓';
         if (rock >= paper && rock >= scissors) return '✊';
         if (paper >= rock && paper >= scissors) return '✋';
         return '✌️';
@@ -68,14 +83,16 @@ export const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onCl
         if (!stats?.ranked_stats) return 'UNKNOWN';
         const { rock, paper, scissors } = stats.ranked_stats;
         const total = rock + paper + scissors;
-        if (total < 5) return 'MYSTERY';
+        if (total < 5) return 'STALKER';
 
         const rPct = rock / total;
         const pPct = paper / total;
+        const sPct = scissors / total;
 
         if (rPct > 0.45) return 'AGGRESSIVE';
         if (pPct > 0.45) return 'DEFENSIVE';
-        return 'TACTICAL';
+        if (sPct > 0.45) return 'STRIKER';
+        return 'BALANCED';
     };
 
     const getOpeningStats = () => {
@@ -95,92 +112,193 @@ export const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onCl
     const openings = getOpeningStats();
 
     return (
-        <div style={{
+        <div className={`stats-modal-overlay ${isOpen ? 'active' : ''}`} onClick={onClose} style={{
             position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            backdropFilter: 'blur(8px)',
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(12px)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 10000,
-            animation: 'fadeIn 0.2s ease-out'
-        }} onClick={onClose}>
-            <div style={{
-                background: 'rgba(20, 20, 30, 0.95)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '24px',
-                padding: '30px',
-                width: '90%',
-                maxWidth: '400px',
-                boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-                position: 'relative'
+            zIndex: 10001,
+            animation: 'fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+        }}>
+            <style jsx>{`
+                @keyframes statsPop {
+                    from { transform: scale(0.9); opacity: 0; }
+                    to { transform: scale(1); opacity: 1; }
+                }
+                .stats-card {
+                    animation: statsPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+                }
+                .glow-text {
+                    text-shadow: 0 0 20px currentColor;
+                }
+            `}</style>
+
+            <div className="stats-card" style={{
+                background: 'linear-gradient(165deg, rgba(30, 30, 45, 0.98), rgba(15, 15, 25, 1))',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '32px',
+                padding: '40px 30px',
+                width: '92%',
+                maxWidth: '440px',
+                boxShadow: '0 30px 60px rgba(0,0,0,0.8), inset 0 0 20px rgba(255,255,255,0.02)',
+                position: 'relative',
+                overflow: 'hidden'
             }} onClick={e => e.stopPropagation()}>
 
+                {/* Decorative Elements */}
+                <div style={{
+                    position: 'absolute', top: '-100px', right: '-100px',
+                    width: '250px', height: '250px',
+                    background: `radial-gradient(circle, ${currentRank.color}11 0%, transparent 70%)`,
+                    zIndex: 0
+                }} />
+
                 {loading ? (
-                    <div style={{ padding: '40px', textAlign: 'center', color: '#888' }}>
-                        Loading intelligence...
+                    <div style={{ padding: '60px', textAlign: 'center' }}>
+                        <div className="loading-spinner" style={{
+                            width: '40px', height: '40px', border: '3px solid rgba(255,255,255,0.1)',
+                            borderTopColor: currentRank.color, borderRadius: '50%', margin: '0 auto 15px',
+                            animation: 'rotate 1s linear infinite'
+                        }} />
+                        <p style={{ color: '#888', fontWeight: 600, letterSpacing: '1px' }}>ANALYZING DATA...</p>
                     </div>
                 ) : stats ? (
                     <>
                         {/* Header */}
-                        <div style={{ textAlign: 'center', marginBottom: '25px' }}>
-                            <div style={{
-                                width: '80px', height: '80px',
-                                background: 'linear-gradient(135deg, #444, #222)',
-                                borderRadius: '50%', margin: '0 auto 15px',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: '2.5rem', border: '2px solid rgba(255,255,255,0.1)'
-                            }}>
-                                👤
+                        <div style={{ textAlign: 'center', marginBottom: '35px', position: 'relative', zIndex: 1 }}>
+                            <div style={{ position: 'relative', display: 'inline-block' }}>
+                                <div style={{
+                                    width: '100px', height: '100px',
+                                    background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02))',
+                                    borderRadius: '50%', margin: '0 auto 20px',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '3.5rem', border: `2px solid ${currentRank.color}44`,
+                                    boxShadow: `0 0 30px ${currentRank.color}22`
+                                }}>
+                                    👤
+                                </div>
+                                <div style={{
+                                    position: 'absolute', bottom: '15px', right: '-10px',
+                                    fontSize: '2rem', filter: 'drop-shadow(0 0 10px rgba(0,0,0,0.5))'
+                                }}>
+                                    {currentRank.icon}
+                                </div>
                             </div>
-                            <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#fff' }}>{stats.username}</h2>
-                            <span style={{
-                                background: 'rgba(255,255,255,0.1)', padding: '4px 12px',
-                                borderRadius: '20px', fontSize: '0.8rem', color: '#aaa',
-                                marginTop: '8px', display: 'inline-block'
+
+                            <h2 style={{
+                                margin: 0, fontSize: '2.2rem', color: '#fff', fontWeight: 900,
+                                textTransform: 'uppercase', letterSpacing: '2px'
                             }}>
-                                {stats.rank_name}
-                            </span>
+                                {stats.username}
+                            </h2>
+
+                            <div style={{
+                                marginTop: '12px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                background: `${currentRank.color}15`,
+                                padding: '6px 16px',
+                                borderRadius: '100px',
+                                border: `1px solid ${currentRank.color}33`,
+                            }}>
+                                <span style={{ color: currentRank.color, fontSize: '1rem', fontWeight: 800 }}>{currentRank.name}</span>
+                                <span style={{ width: '4px', height: '4px', background: 'rgba(255,255,255,0.3)', borderRadius: '50%' }}></span>
+                                <span style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 600 }}>{stats.total_wins} WINS</span>
+                            </div>
                         </div>
 
                         {/* Stats Grid */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' }}>
-                            <div className="stat-box" style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '16px', textAlign: 'center' }}>
-                                <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>WIN RATE</div>
-                                <div style={{ fontSize: '1.8rem', fontWeight: 900, color: winRate > 50 ? '#4caf50' : '#ff4444' }}>
-                                    {winRate}%
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '35px', position: 'relative', zIndex: 1 }}>
+                            <div style={{
+                                background: 'rgba(255,255,255,0.04)', padding: '25px 15px',
+                                borderRadius: '24px', textAlign: 'center',
+                                border: '1px solid rgba(255,255,255,0.05)'
+                            }}>
+                                <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px', fontWeight: 700, letterSpacing: '1px' }}>WIN RATE</div>
+                                <div className="glow-text" style={{
+                                    fontSize: '3rem', fontWeight: 900,
+                                    color: winRate > 50 ? '#4caf50' : '#ff4444'
+                                }}>
+                                    {winRate}<span style={{ fontSize: '1.2rem', opacity: 0.6 }}>%</span>
                                 </div>
                             </div>
-                            <div className="stat-box" style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '16px', textAlign: 'center' }}>
-                                <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>STYLE</div>
-                                <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#fff' }}>
+                            <div style={{
+                                background: 'rgba(255,255,255,0.04)', padding: '25px 15px',
+                                borderRadius: '24px', textAlign: 'center',
+                                border: '1px solid rgba(255,255,255,0.05)'
+                            }}>
+                                <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '10px', fontWeight: 700, letterSpacing: '1px' }}>STYLE</div>
+                                <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#fff', letterSpacing: '1px' }}>
                                     {getPsychProfile()}
                                 </div>
+                                <div style={{ fontSize: '1.5rem', marginTop: '5px' }}>
+                                    {getFavoriteHand()}
+                                </div>
                             </div>
                         </div>
 
-                        {/* Openings */}
-                        <div style={{ marginBottom: '25px' }}>
-                            <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                                Opening Moves
+                        {/* Openings Section */}
+                        <div style={{
+                            background: 'rgba(0,0,0,0.2)', padding: '25px', borderRadius: '24px',
+                            border: '1px solid rgba(255,255,255,0.03)', position: 'relative', zIndex: 1
+                        }}>
+                            <div style={{
+                                fontSize: '0.85rem', color: '#888', marginBottom: '15px',
+                                textAlign: 'center', fontWeight: 700, letterSpacing: '2px'
+                            }}>
+                                OPENING TENDENCIES
                             </div>
-                            <div style={{ display: 'flex', gap: '10px', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
-                                <div style={{ width: `${openings.rock}%`, background: '#ff4444' }} />
-                                <div style={{ width: `${openings.paper}%`, background: '#4caf50' }} />
-                                <div style={{ width: `${openings.scissors}%`, background: '#2196f3' }} />
+
+                            <div style={{ height: '12px', borderRadius: '6px', overflow: 'hidden', display: 'flex', background: 'rgba(255,255,255,0.05)' }}>
+                                <div style={{ width: `${openings.rock}%`, background: '#ff4444', boxShadow: '0 0 10px rgba(255,68,68,0.5)' }} />
+                                <div style={{ width: `${openings.paper}%`, background: '#4caf50', boxShadow: '0 0 10px rgba(76,175,80,0.5)' }} />
+                                <div style={{ width: `${openings.scissors}%`, background: '#2196f3', boxShadow: '0 0 10px rgba(33,150,243,0.5)' }} />
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.75rem', color: '#aaa' }}>
-                                <span>✊ {openings.rock}%</span>
-                                <span>✋ {openings.paper}%</span>
-                                <span>✌️ {openings.scissors}%</span>
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '15px' }}>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '1.2rem', marginBottom: '2px' }}>✊</div>
+                                    <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#ff4444' }}>{openings.rock}%</div>
+                                </div>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '1.2rem', marginBottom: '2px' }}>✋</div>
+                                    <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#4caf50' }}>{openings.paper}%</div>
+                                </div>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '1.2rem', marginBottom: '2px' }}>✌️</div>
+                                    <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#2196f3' }}>{openings.scissors}%</div>
+                                </div>
                             </div>
                         </div>
 
-                        <div style={{ fontSize: '0.7rem', color: '#555', textAlign: 'center' }}>
-                            Based on {stats.ranked_stats?.matches || 0} Ranked Matches
+                        <div style={{
+                            marginTop: '25px', textAlign: 'center',
+                            fontSize: '0.85rem', color: '#555', fontWeight: 600,
+                            letterSpacing: '1px'
+                        }}>
+                            DATASET: {stats.ranked_stats?.matches || 0} RANKED BATTLES
                         </div>
+
+                        <button
+                            onClick={onClose}
+                            style={{
+                                marginTop: '30px', width: '100%', padding: '15px',
+                                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '16px', color: '#888', fontWeight: 800,
+                                cursor: 'pointer', transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#fff'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = '#888'; }}
+                        >
+                            CLOSE PROFILE
+                        </button>
                     </>
                 ) : (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#f55' }}>
-                        Failed to load data.
+                    <div style={{ padding: '40px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '15px' }}>⚠️</div>
+                        <p style={{ color: '#ff4444', fontWeight: 800 }}>FAILED TO SYNC DATA</p>
+                        <button onClick={onClose} style={{ marginTop: '20px', padding: '10px 20px', borderRadius: '10px', background: '#333', color: '#fff', border: 'none' }}>CLOSE</button>
                     </div>
                 )}
             </div>

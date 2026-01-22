@@ -22,6 +22,7 @@ export const useGameController = (
     const [gameWinner, setGameWinner] = useState<'player' | 'opponent' | null>(null);
     const [choiceMade, setChoiceMade] = useState(false);
     const [opponentImageUrl, setOpponentImageUrl] = useState<string | null>(null);
+    const [opponentId, setOpponentId] = useState<string | null>(null);
     const [showCollision, setShowCollision] = useState<boolean>(false);
 
     // Rematch states
@@ -85,6 +86,12 @@ export const useGameController = (
                 setOpponentImageUrl(data.opponentImageUrl);
             } else {
                 setOpponentImageUrl(null);
+            }
+
+            if (data?.opponentId) {
+                setOpponentId(data.opponentId);
+            } else {
+                setOpponentId(null);
             }
         });
 
@@ -312,6 +319,7 @@ export const useGameController = (
         roundWinner,
         gameWinner,
         opponentImageUrl,
+        opponentId,
         showCollision,
         rematch: { requested: rematchRequested, status: rematchStatus },
         reward: { show: showRewardAnim, data: rewardData },
