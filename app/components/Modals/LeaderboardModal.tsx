@@ -1,14 +1,17 @@
 import React from 'react';
 import type { User } from '@/lib/types'; // Assuming User or similar interface might exist, otherwise using any for prop
 
+
 interface LeaderboardModalProps {
     onClose: () => void;
     leaderboardData: any[];
     timeFilter: 'daily' | 'weekly' | 'monthly';
     setTimeFilter: (filter: 'daily' | 'weekly' | 'monthly') => void;
+    onShowStats?: (userId: string) => void;
+    currentUserId?: string;
 }
 
-export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, leaderboardData, timeFilter, setTimeFilter }) => {
+export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, leaderboardData, timeFilter, setTimeFilter, onShowStats, currentUserId }) => {
     return (
         <div className="leaderboard-overlay">
             <div className="leaderboard-card">
@@ -42,9 +45,6 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, lea
                 <div className="top-three-container">
                     {[1, 0, 2].map((orderIndex) => {
                         const player = leaderboardData[orderIndex];
-                        // If we don't have enough players, show placeholder? Logic from page.tsx:
-                        // if (!player && leaderboardData.length > orderIndex) return null; -> Wait, this logic was slightly weird in original.
-                        // "if (!player) return placeholder..."
 
                         if (!player) return (
                             <div key={`placeholder-${orderIndex}`} className={`rank-card rank-${orderIndex + 1}`} style={{ opacity: 0.3 }}>
@@ -55,7 +55,13 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, lea
                         );
 
                         return (
-                            <div key={player.id} className={`rank-card rank-${orderIndex + 1}`}>
+                            <div
+                                key={player.id}
+                                className={`rank-card rank-${orderIndex + 1} clickable`}
+                                onClick={() => onShowStats && onShowStats(player.id)}
+                                style={{ cursor: 'pointer' }}
+                                title="Ver Perfil"
+                            >
                                 <div className="rank-avatar">{orderIndex + 1}</div>
                                 <div className="rank-name">{player.username || `Player ${player.id.substring(0, 4)}`}</div>
                                 <div className="rank-score">{player.total_wins} W</div>
@@ -71,7 +77,13 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, lea
                         </div>
                     ) : (
                         leaderboardData.slice(3).map((player, index) => (
-                            <div key={player.id} className="leaderboard-item">
+                            <div
+                                key={player.id}
+                                className="leaderboard-item clickable"
+                                onClick={() => onShowStats && onShowStats(player.id)}
+                                style={{ cursor: 'pointer' }}
+                                title="Ver Perfil"
+                            >
                                 <div className="rank-badge" style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', width: '30px', height: '30px', fontSize: '0.9rem' }}>
                                     {index + 4}
                                 </div>
