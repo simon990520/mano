@@ -5,6 +5,7 @@ interface PlayerStatsModalProps {
     isOpen: boolean;
     onClose: () => void;
     userId: string | null; // ID to fetch stats for
+    imageUrl?: string | null; // Added image URL prop
     socket: Socket | null;
 }
 
@@ -38,7 +39,7 @@ const RANKS = [
     { id: 'LEYENDA', name: 'LEYENDA', icon: '👑', color: '#ff00ff' }
 ];
 
-export const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onClose, userId, socket }) => {
+export const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onClose, userId, imageUrl, socket }) => {
     const [stats, setStats] = useState<PlayerProfile | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -173,9 +174,14 @@ export const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onCl
                                     borderRadius: '50%', margin: '0 auto 20px',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     fontSize: '3.5rem', border: `2px solid ${currentRank.color}44`,
-                                    boxShadow: `0 0 30px ${currentRank.color}22`
+                                    boxShadow: `0 0 30px ${currentRank.color}22`,
+                                    overflow: 'hidden'
                                 }}>
-                                    👤
+                                    {imageUrl ? (
+                                        <img src={imageUrl} alt={stats.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    ) : (
+                                        '👤'
+                                    )}
                                 </div>
                                 <div style={{
                                     position: 'absolute', bottom: '15px', right: '-10px',
@@ -281,7 +287,11 @@ export const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onCl
                         </div>
 
                         <button
-                            onClick={onClose}
+                            onClick={() => {
+                                const audio = new Audio('/sounds/sfx/click.mp3');
+                                audio.play().catch(() => { });
+                                onClose();
+                            }}
                             style={{
                                 marginTop: '30px', width: '100%', padding: '15px',
                                 background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
