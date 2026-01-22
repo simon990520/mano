@@ -104,7 +104,7 @@ export const GameArena: React.FC<GameArenaProps> = ({
                                         top: 0,
                                         left: 0,
                                         height: '100%',
-                                        width: `${(turnTimer / 3) * 100}%`,
+                                        width: `${(turnTimer / 5) * 100}%`,
                                         background: 'linear-gradient(90deg, #ffd700, #ff8c00)',
                                         transition: 'width 0.1s linear',
                                         zIndex: 0

@@ -365,6 +365,19 @@ app.prepare().then(() => {
             }
         });
 
+        socket.on('leaveQueue', () => {
+            console.log('[SERVER_GAME] Player leaving queue/room:', socket.id, userId);
+            removeFromQueue(socket.id, userId);
+
+            // Also leave activeRoom if it's over
+            const room = activeRooms.get(socket.id);
+            if (room && room.state === 'gameOver') {
+                activeRooms.delete(socket.id);
+            }
+
+            socket.emit('lobby'); // Inform client they are back to lobby
+        });
+
         socket.on('makeChoice', (choice) => {
             const room = activeRooms.get(socket.id);
             if (!room || room.state !== 'playing') return;
@@ -488,7 +501,7 @@ app.prepare().then(() => {
             }
 
             // Remove from waiting queues immediately if just queuing
-            removeFromQueue(socket.id);
+            removeFromQueue(socket.id, userId);
 
             // Handle active game disconnection
             const room = activeRooms.get(socket.id);
@@ -543,6 +556,11 @@ app.prepare().then(() => {
                     // 3. Update maps
                     activeRooms.delete(oldSocketId); // Remove old key
                     activeRooms.set(socket.id, room); // Set new key
+
+                    // Update rematch request tracking if applicable
+                    if (room.rematchRequestedBy === oldSocketId) {
+                        room.rematchRequestedBy = socket.id;
+                    }
 
                     // 4. Re-join socket room
                     socket.join(room.id);
@@ -606,15 +624,16 @@ app.prepare().then(() => {
             }
         });
 
-        function removeFromQueue(socketId) {
+        function removeFromQueue(socketId, uId = null) {
+            console.log(`[SERVER_GAME] Cleaning queues for socket: ${socketId}${uId ? `, user: ${uId}` : ''}`);
             // Remove from Casual
             Object.values(waitingPlayers).forEach(queue => {
-                const index = queue.findIndex(p => p.socketId === socketId);
+                const index = queue.findIndex(p => p.socketId === socketId || (uId && p.userId === uId));
                 if (index !== -1) queue.splice(index, 1);
             });
             // Remove from Ranked
             Object.values(waitingRanked).forEach(queue => {
-                const index = queue.findIndex(p => p.socketId === socketId);
+                const index = queue.findIndex(p => p.socketId === socketId || (uId && p.userId === uId));
                 if (index !== -1) queue.splice(index, 1);
             });
         }
@@ -643,7 +662,7 @@ app.prepare().then(() => {
 
         room.state = 'playing';
         room.players.forEach(p => p.choice = null);
-        room.turnTimer = 3; // 3 seconds to choose
+        room.turnTimer = 5; // 5 seconds to choose
 
         io.to(room.id).emit('roundStart', room.round);
         io.to(room.id).emit('timer', room.turnTimer);
@@ -917,21 +936,25 @@ app.prepare().then(() => {
 
         // RECORD MATCH IN DB
         try {
+            console.log(`[SERVER_DB] Attempting to record match for ${player1.userId} vs ${player2.userId}...`);
             const { error } = await supabase.from('matches').insert({
                 player1_id: player1.userId,
                 player2_id: player2.userId,
-                winner_id: winnerId === 'tie' ? null : winnerId,
+                winner_id: (winnerId === 'tie' || !winnerId) ? null : winnerId,
                 p1_score: player1.score,
                 p2_score: player2.score,
                 mode: room.mode || 'casual',
                 stake: room.stakeTier || 0,
-                created_at: new Date().toISOString() // Explicit timestamp
+                created_at: new Date().toISOString()
             });
 
-            if (error) throw error;
-            console.log(`[SERVER_DB] Match recorded. Winner: ${winnerId}`);
+            if (error) {
+                console.error('[SERVER_DB] Match insert error details:', JSON.stringify(error, null, 2));
+                throw error;
+            }
+            console.log(`[SERVER_DB] Match recorded successfully. Winner: ${winnerId}`);
         } catch (err) {
-            console.error('[SERVER_DB] Match record FAILED:', err.message);
+            console.error('[SERVER_DB] Match record exception:', err.message);
         }
 
         // Emit gameOver to players (if connected)
@@ -954,10 +977,15 @@ app.prepare().then(() => {
             }
         });
 
-        // Cleanup room after delay
+        // Cleanup room after delay (Wait 60s to allow for rematches)
         setTimeout(() => {
-            room.players.forEach(p => activeRooms.delete(p.socketId));
-        }, 5000);
+            room.players.forEach(p => {
+                if (activeRooms.get(p.socketId) === room) {
+                    activeRooms.delete(p.socketId);
+                }
+            });
+            console.log(`[SERVER_GAME] Room ${room.id} cleanup check complete.`);
+        }, 60000);
     }
 
     httpServer

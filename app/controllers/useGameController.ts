@@ -39,7 +39,7 @@ export const useGameController = (
     const [gameMode, setGameMode] = useState<'casual' | 'ranked'>('casual');
     const [selectedStake, setSelectedStake] = useState(10);
     const [currentMatchStake, setCurrentMatchStake] = useState<number | null>(null);
-    const [turnTimer, setTurnTimer] = useState(3);
+    const [turnTimer, setTurnTimer] = useState(5);
 
     const isSignedIn = !!user;
 
@@ -196,7 +196,7 @@ export const useGameController = (
                 setChoiceMade(false);
                 setRematchRequested(false);
                 setRematchStatus('');
-            }, 2000);
+            }, 500);
         });
 
         socket.on('rematchDeclined', () => {
@@ -231,6 +231,10 @@ export const useGameController = (
             setRematchRequested(false);
         });
 
+        socket.on('lobby', () => {
+            setGameState('lobby');
+        });
+
         return () => {
             socket.off('matchError');
             socket.off('waiting');
@@ -246,6 +250,7 @@ export const useGameController = (
             socket.off('opponentReconnected');
             socket.off('reconnectSuccess');
             socket.off('opponentLeft');
+            socket.off('lobby');
         };
     }, [socket, isSignedIn]);
 
