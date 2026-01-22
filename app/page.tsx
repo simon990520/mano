@@ -247,7 +247,7 @@ export default function Home() {
                 />
             )}
 
-            {(gameState === 'playing' || gameState === 'countdown') && !gameData.hands.player && (
+            {gameState === 'playing' && !gameData.hands.player && (
                 <div style={{ position: 'fixed', bottom: '40px', left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '20px', zIndex: 100 }}>
                     {['rock', 'paper', 'scissors'].map((choice) => (
                         <button

@@ -592,7 +592,10 @@ app.prepare().then(() => {
                     .eq('id', targetUserId)
                     .single();
 
-                if (profileErr) throw profileErr;
+                if (profileErr) {
+                    console.error('[SERVER_STATS] Profile fetch error:', profileErr);
+                    throw profileErr;
+                }
 
                 // Fetch detailed stats from the new intermediate table
                 const { data: stats, error: statsErr } = await supabase
@@ -600,6 +603,12 @@ app.prepare().then(() => {
                     .select('*')
                     .eq('user_id', targetUserId)
                     .single();
+
+                if (statsErr && statsErr.code !== 'PGRST116') {
+                    console.error('[SERVER_STATS] Stats fetch error:', statsErr);
+                }
+
+                console.log(`[SERVER_STATS] Stats for ${targetUserId}:`, stats ? 'Found' : 'Not Found');
 
                 // If stats don't exist yet, return empty defaults
                 const finalData = {
@@ -811,7 +820,7 @@ app.prepare().then(() => {
         } else {
             room.round++;
             setTimeout(() => {
-                startRound(room);
+                startCountdown(room.id); // Every round starts with a countdown
             }, 4000);
         }
     }
@@ -850,9 +859,9 @@ app.prepare().then(() => {
                     total_games: (profile.total_games || 0) + 1
                 };
 
-                // HANDLE RANKED STATS & RP
+                // 1. MODE-SPECIFIC LOGIC
                 if (room.mode === 'ranked') {
-                    // 1. RP Logic
+                    // RP Logic
                     let multiplier = 1;
                     if (room.stakeTier >= 1000) multiplier = 10;
                     else if (room.stakeTier >= 500) multiplier = 5;
@@ -873,9 +882,16 @@ app.prepare().then(() => {
                         updates.gems = (profile.gems || 0) + prize;
                         resultData.prize = prize;
                     }
+                } else if (isWinner && room.stakeTier) {
+                    // Casual Mode
+                    const prize = room.stakeTier * 2;
+                    updates.coins = (profile.coins || 0) + prize;
+                    resultData.prize = prize;
+                }
 
-                    // 2. STATS AGGREGATION (Relational Table)
-                    const session = room.stats[player.userId];
+                // 2. GLOBAL STATS LOGIC (For both modes)
+                const session = room.stats[player.userId];
+                if (session) {
                     const { error: statsError } = await supabase.rpc('increment_player_stats', {
                         t_user_id: player.userId,
                         t_is_win: isWinner ? 1 : 0,
@@ -888,10 +904,8 @@ app.prepare().then(() => {
                     });
 
                     if (statsError) {
-                        // Fallback to manual update if RPC is missing or fails
                         console.warn('[SERVER_STATS] RPC failed, using manual upsert');
                         const { data: existingStats } = await supabase.from('player_stats').select('*').eq('user_id', player.userId).single();
-
                         const newStatsRow = {
                             user_id: player.userId,
                             matches_played: (existingStats?.matches_played || 0) + 1,
@@ -904,15 +918,8 @@ app.prepare().then(() => {
                             opening_scissors: (existingStats?.opening_scissors || 0) + (session.openings.scissors || 0),
                             updated_at: new Date().toISOString()
                         };
-
                         await supabase.from('player_stats').upsert(newStatsRow);
                     }
-                }
-                // Handle Casual Mode
-                else if (isWinner && room.stakeTier) {
-                    const prize = room.stakeTier * 2;
-                    updates.coins = (profile.coins || 0) + prize;
-                    resultData.prize = prize;
                 }
 
                 await supabase.from('profiles').update(updates).eq('id', player.userId);
