@@ -25,10 +25,18 @@ export default function Home() {
     // 0. Local UI State
     const { showSettings, setShowSettings, showLeaderboard, setShowLeaderboard } = useLocalUI();
     const [statsUserId, setStatsUserId] = useState<string | null>(null);
+    const [statsImageUrl, setStatsImageUrl] = useState<string | null>(null);
+    const [showCollision, setShowCollision] = useState(false);
 
-    const handleOpenStats = (userId: string) => {
+    const handleOpenStats = (userId: string, imageUrl?: string | null) => {
         setStatsUserId(userId);
+        setStatsImageUrl(imageUrl || null);
         playSound('/sounds/sfx/click.mp3');
+    };
+
+    const handleCloseStats = () => {
+        setStatsUserId(null);
+        setStatsImageUrl(null);
     };
 
     // 1. Audio System
@@ -171,21 +179,12 @@ export default function Home() {
                 <LeaderboardWrapper onClose={() => setShowLeaderboard(false)} onShowStats={handleOpenStats} />
             )}
 
-            {economyState.showOnboarding && (
-                <OnboardingModal
-                    username={economyState.username}
-                    setUsername={economyActions.setUsername}
-                    birthDate={economyState.birthDate}
-                    setBirthDate={economyActions.setBirthDate}
-                    onSave={economyActions.handleSaveProfile}
-                />
-            )}
-
             {statsUserId && (
                 <PlayerStatsModal
                     isOpen={!!statsUserId}
                     userId={statsUserId}
-                    onClose={() => setStatsUserId(null)}
+                    imageUrl={statsImageUrl}
+                    onClose={handleCloseStats}
                     socket={socket}
                 />
             )}
@@ -202,7 +201,7 @@ export default function Home() {
                     playSound={playSound}
                     rankName={economyState.rankName}
                     rp={economyState.rp}
-                    onShowStats={() => user ? handleOpenStats(user.id) : undefined}
+                    onShowStats={() => user ? handleOpenStats(user.id, user.imageUrl) : undefined}
                 />
             ) : gameState === 'waiting' ? (
                 <div className="center-content">
@@ -238,7 +237,10 @@ export default function Home() {
                     currentMatchStake={gameData.currentMatchStake}
                     gameMode={gameData.gameMode}
                     countdown={gameData.countdown}
-                    onShowStats={handleOpenStats}
+                    onShowStats={(id) => {
+                        const img = id === user?.id ? user?.imageUrl : gameData.opponentImageUrl;
+                        handleOpenStats(id, img);
+                    }}
                     opponentId={gameData.opponentId}
                 />
             )}
