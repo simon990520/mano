@@ -17,12 +17,19 @@ import { ShopModal } from '@/app/components/modals/ShopModal';
 import { LeaderboardModal } from '@/app/components/modals/LeaderboardModal';
 import { OnboardingModal } from '@/app/components/modals/OnboardingModal';
 import { GameOverModal } from '@/app/components/modals/GameOverModal';
+import { PlayerStatsModal } from '@/app/components/modals/PlayerStatsModal';
 
 export default function Home() {
     const { user, isSignedIn } = useUser();
 
     // 0. Local UI State
     const { showSettings, setShowSettings, showLeaderboard, setShowLeaderboard } = useLocalUI();
+    const [statsUserId, setStatsUserId] = useState<string | null>(null);
+
+    const handleOpenStats = (userId: string) => {
+        setStatsUserId(userId);
+        playSound('/sounds/sfx/click.mp3');
+    };
 
     // 1. Audio System
     const { playSound, musicRef, volumeStates, refs: audioRefs } = useAudioController();
@@ -161,7 +168,7 @@ export default function Home() {
             )}
 
             {showLeaderboard && (
-                <LeaderboardWrapper onClose={() => setShowLeaderboard(false)} />
+                <LeaderboardWrapper onClose={() => setShowLeaderboard(false)} onShowStats={handleOpenStats} />
             )}
 
             {economyState.showOnboarding && (
@@ -171,6 +178,15 @@ export default function Home() {
                     birthDate={economyState.birthDate}
                     setBirthDate={economyActions.setBirthDate}
                     onSave={economyActions.handleSaveProfile}
+                />
+            )}
+
+            {statsUserId && (
+                <PlayerStatsModal
+                    isOpen={!!statsUserId}
+                    userId={statsUserId}
+                    onClose={() => setStatsUserId(null)}
+                    socket={socket}
                 />
             )}
 
@@ -186,6 +202,7 @@ export default function Home() {
                     playSound={playSound}
                     rankName={economyState.rankName}
                     rp={economyState.rp}
+                    onShowStats={() => user ? handleOpenStats(user.id) : undefined}
                 />
             ) : gameState === 'waiting' ? (
                 <div className="center-content">
@@ -221,6 +238,8 @@ export default function Home() {
                     currentMatchStake={gameData.currentMatchStake}
                     gameMode={gameData.gameMode}
                     countdown={gameData.countdown}
+                    onShowStats={handleOpenStats}
+                    opponentId={gameData.opponentId}
                 />
             )}
 
@@ -257,7 +276,7 @@ export default function Home() {
 }
 
 // Temporary Wrapper for Leaderboard logic
-function LeaderboardWrapper({ onClose }: { onClose: () => void }) {
+function LeaderboardWrapper({ onClose, onShowStats }: { onClose: () => void, onShowStats: (id: string) => void }) {
     const [data, setData] = useState<any[]>([]);
     const [filter, setFilter] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
 
@@ -269,7 +288,7 @@ function LeaderboardWrapper({ onClose }: { onClose: () => void }) {
         fetchLeaderboard();
     }, [filter]);
 
-    return <LeaderboardModal leaderboardData={data} timeFilter={filter} setTimeFilter={setFilter} onClose={onClose} />;
+    return <LeaderboardModal leaderboardData={data} timeFilter={filter} setTimeFilter={setFilter} onClose={onClose} onShowStats={onShowStats} />;
 }
 
 function useLocalUI() {

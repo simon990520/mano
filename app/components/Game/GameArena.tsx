@@ -14,8 +14,11 @@ interface GameArenaProps {
     roundWinner: 'player' | 'opponent' | 'tie' | null;
     turnTimer: number;
     currentMatchStake: number | null;
+
     gameMode: 'casual' | 'ranked';
     countdown: number;
+    onShowStats: (userId: string) => void;
+    opponentId?: string | null;
 }
 
 const CHOICE_EMOJIS = {
@@ -38,7 +41,9 @@ export const GameArena: React.FC<GameArenaProps> = ({
     turnTimer,
     currentMatchStake,
     gameMode,
-    countdown
+    countdown,
+    onShowStats,
+    opponentId
 }) => {
     return (
         <div className={`game-container ${(gameState === 'roundResult' && showCollision) ? 'shake' : ''}`}>
@@ -50,7 +55,12 @@ export const GameArena: React.FC<GameArenaProps> = ({
                         <div className="score-track">
                             <div className="score-fill fill-left" style={{ height: `${(playerScore / 3) * 100}%` }}></div>
                         </div>
-                        <div className="score-avatar">
+                        <div
+                            className="score-avatar clickable"
+                            onClick={() => onShowStats(user?.id)}
+                            style={{ cursor: 'pointer', pointerEvents: 'auto', zIndex: 100 }}
+                            title="Ver mis estadísticas"
+                        >
                             {user?.imageUrl ? <img src={user.imageUrl} className="avatar-img" alt="You" /> : <span style={{ fontSize: '1.5rem' }}>😎</span>}
                         </div>
                     </div>
@@ -59,7 +69,12 @@ export const GameArena: React.FC<GameArenaProps> = ({
                         <div className="score-track">
                             <div className="score-fill fill-right" style={{ height: `${(opponentScore / 3) * 100}%` }}></div>
                         </div>
-                        <div className="score-avatar">
+                        <div
+                            className="score-avatar clickable"
+                            onClick={() => opponentId && onShowStats(opponentId)}
+                            style={{ cursor: 'pointer', pointerEvents: 'auto', zIndex: 100 }}
+                            title="Ver perfil del oponente"
+                        >
                             {opponentImageUrl ? <img src={opponentImageUrl} className="avatar-img" alt="Opponent" /> : <span style={{ fontSize: '1.5rem' }}>🤖</span>}
                         </div>
                     </div>
@@ -124,6 +139,21 @@ export const GameArena: React.FC<GameArenaProps> = ({
             {gameState === 'countdown' && (
                 <div className="countdown-overlay">
                     <div className="countdown">{countdown}</div>
+                </div>
+            )}
+
+            {/* Reconnection Overlay - Simplified to use boolean or flag if available */}
+            {gameState === 'playing' && (
+                <div id="disconnection-overlay" style={{
+                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.85)', zIndex: 9999,
+                    display: 'none', // Controlled by external logic or state if we add it
+                    flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    backdropFilter: 'blur(5px)'
+                }}>
+                    <div style={{ fontSize: '3rem', animation: 'pulse 1s infinite' }}>⚠️</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ff4444', marginTop: '10px' }}>OPPONENT DISCONNECTED</div>
+                    <div style={{ fontSize: '0.9rem', opacity: 0.8, marginTop: '5px' }}>Waiting for reconnection...</div>
                 </div>
             )}
 
