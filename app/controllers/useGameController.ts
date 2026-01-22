@@ -102,6 +102,9 @@ export const useGameController = (
             setGameState('countdown');
             if (count === 3) {
                 playSound('/sounds/sfx/countdown.mp3');
+                setPlayerChoice(null);
+                setOpponentChoice(null);
+                setChoiceMade(false);
             }
         });
 
