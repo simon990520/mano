@@ -1,5 +1,5 @@
 import React from 'react';
-import type { User } from '@/lib/types'; // Assuming User or similar interface might exist, otherwise using any for prop
+
 
 
 interface LeaderboardModalProps {
