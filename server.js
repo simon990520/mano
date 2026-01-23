@@ -149,7 +149,7 @@ app.prepare().then(() => {
                 player.rank = currentRank;
 
                 const queueMap = mode === 'casual' ? waitingPlayers : waitingRanked;
-                const queueKey = mode === 'casual' ? currentStake : currentRank;
+                const queueKey = mode === 'casual' ? currentStake : `${currentRank}_${currentStake}`;
 
                 if (queueMap[queueKey] && queueMap[queueKey].length > 0) {
                     const opponent = queueMap[queueKey].shift();
@@ -259,7 +259,7 @@ app.prepare().then(() => {
             }
         });
 
-        const WAITING_TIMEOUT = 10000;
+        const WAITING_TIMEOUT = 10; // 10 seconds
         socket.on('disconnect', () => {
             if (userSockets.get(userId) === socket.id) userSockets.delete(userId);
             removeFromQueue(socket.id, userId);
@@ -271,12 +271,29 @@ app.prepare().then(() => {
 
                 const player = room.players.find(p => p.socketId === socket.id);
                 player.disconnected = true;
-                if (opponent.socketId) io.to(opponent.socketId).emit('opponentDisconnected', { timeout: WAITING_TIMEOUT });
 
-                player.reconnectTimeout = setTimeout(() => {
-                    player.disconnected = true;
-                    endGame(room, opponent.userId);
-                }, WAITING_TIMEOUT);
+                // PAUSE GAME
+                if (room.turnTimerInterval) {
+                    clearInterval(room.turnTimerInterval);
+                    room.turnTimerInterval = null;
+                }
+
+                // START RECONNECT COUNTDOWN
+                let timeLeft = WAITING_TIMEOUT;
+                if (opponent.socketId) io.to(opponent.socketId).emit('opponentDisconnected', { timeout: timeLeft * 1000 });
+
+                if (room.reconnectInterval) clearInterval(room.reconnectInterval);
+                room.reconnectInterval = setInterval(() => {
+                    timeLeft--;
+                    if (opponent.socketId) io.to(opponent.socketId).emit('opponentDisconnected', { timeout: timeLeft * 1000 });
+
+                    if (timeLeft <= 0) {
+                        clearInterval(room.reconnectInterval);
+                        room.reconnectInterval = null;
+                        console.log(`[SERVER_GAME] Reconnect timeout for ${userId}. Forfeiting.`);
+                        endGame(room, opponent.userId);
+                    }
+                }, 1000);
             }
         });
 
@@ -284,7 +301,12 @@ app.prepare().then(() => {
             for (const [key, room] of activeRooms.entries()) {
                 const player = room.players.find(p => p.userId === userId && p.disconnected);
                 if (player) {
-                    clearTimeout(player.reconnectTimeout);
+                    // STOP RECONNECT COUNTDOWN
+                    if (room.reconnectInterval) {
+                        clearInterval(room.reconnectInterval);
+                        room.reconnectInterval = null;
+                    }
+
                     player.disconnected = false;
                     const oldSocketId = player.socketId;
                     player.socketId = socket.id;
@@ -295,6 +317,13 @@ app.prepare().then(() => {
                     socket.emit('reconnectSuccess', { roomState: room, currentRound: room.round, myScore: player.score, opScore: room.players.find(p => p.userId !== userId).score });
                     const opponent = room.players.find(p => p.userId !== userId);
                     io.to(opponent.socketId).emit('opponentReconnected');
+
+                    // RESUME GAME
+                    if (room.state === 'playing') {
+                        startRound(room);
+                    } else if (room.state === 'countdown') {
+                        startCountdown(room.id);
+                    }
                     return;
                 }
             }
