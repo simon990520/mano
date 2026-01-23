@@ -237,6 +237,12 @@ app.prepare().then(() => {
                 io.to(opponentSocket).emit('rematchAccepted');
 
                 setTimeout(() => {
+                    // CLEAR ANY PENDING TIMEOUTS ON REMATCH
+                    if (room.nextStepTimeout) {
+                        clearTimeout(room.nextStepTimeout);
+                        room.nextStepTimeout = null;
+                    }
+
                     room.players.forEach(p => { p.score = 0; p.choice = null; });
                     room.round = 1;
                     room.state = 'countdown';
@@ -272,10 +278,14 @@ app.prepare().then(() => {
                 const player = room.players.find(p => p.socketId === socket.id);
                 player.disconnected = true;
 
-                // PAUSE GAME
+                // PAUSE GAME & CLEAR NEXT STEPS
                 if (room.turnTimerInterval) {
                     clearInterval(room.turnTimerInterval);
                     room.turnTimerInterval = null;
+                }
+                if (room.nextStepTimeout) {
+                    clearTimeout(room.nextStepTimeout);
+                    room.nextStepTimeout = null;
                 }
 
                 // START RECONNECT COUNTDOWN
@@ -350,7 +360,7 @@ app.prepare().then(() => {
             io.to(room.id).emit('countdown', room.countdown);
             if (room.countdown === 0) {
                 clearInterval(interval);
-                startRound(room);
+                room.nextStepTimeout = setTimeout(() => startRound(room), 100); // Small delay to sync
             }
             room.countdown--;
         }, 1000);
@@ -376,7 +386,7 @@ app.prepare().then(() => {
     }
 
     function handleRoundTimeout(room) {
-        if (!room || room.state !== 'playing') return;
+        if (!room || room.state !== 'playing' || room.players.some(p => p.disconnected)) return;
         const [p1, p2] = room.players;
         if (!p1.choice && !p2.choice) {
             room.inactivityTies = (room.inactivityTies || 0) + 1;
@@ -405,6 +415,7 @@ app.prepare().then(() => {
     }
 
     async function resolveRound(room) {
+        if (room.players.some(p => p.disconnected)) return; // Don't resolve if someone left
         if (room.turnTimerInterval) { clearInterval(room.turnTimerInterval); room.turnTimerInterval = null; }
         const [p1, p2] = room.players;
         if (p1.choice && p2.choice && room.turnTimer > 0) room.inactivityTies = 0;
@@ -420,16 +431,31 @@ app.prepare().then(() => {
             io.to(p.socketId).emit('roundResult', { winner: result === 'tie' ? 'tie' : (result === `player${idx + 1}` ? 'player' : 'opponent'), playerChoice: p.choice, opponentChoice: opp.choice, playerScore: p.score, opponentScore: opp.score, round: room.round });
         });
         if (p1.score >= 3 || p2.score >= 3) {
-            setTimeout(() => endGame(room), 3000);
+            room.nextStepTimeout = setTimeout(() => endGame(room), 3000);
         } else {
             room.round++;
-            setTimeout(() => startCountdown(room.id), 4000);
+            room.nextStepTimeout = setTimeout(() => startCountdown(room.id), 4000);
         }
     }
 
     async function endGame(room, forcedWinnerId = null) {
         if (room.state === 'gameOver') return;
         room.state = 'gameOver';
+
+        // CLEAR ALL INTERVALS/TIMEOUTS
+        if (room.reconnectInterval) {
+            clearInterval(room.reconnectInterval);
+            room.reconnectInterval = null;
+        }
+        if (room.turnTimerInterval) {
+            clearInterval(room.turnTimerInterval);
+            room.turnTimerInterval = null;
+        }
+        if (room.nextStepTimeout) {
+            clearTimeout(room.nextStepTimeout);
+            room.nextStepTimeout = null;
+        }
+
         room.players.forEach(p => { if (p.reconnectTimeout) clearTimeout(p.reconnectTimeout); });
 
         const [p1, p2] = room.players;
