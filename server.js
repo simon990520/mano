@@ -170,8 +170,8 @@ app.prepare().then(() => {
                         return;
                     }
 
-                    socket.emit('matchFound', { roomId: room.id, playerIndex: 0, opponentId: opponent.id, opponentImageUrl: opponent.imageUrl, stakeTier: currentStake, mode, rank: currentRank });
-                    io.to(opponent.socketId).emit('matchFound', { roomId: room.id, playerIndex: 1, opponentId: player.id, opponentImageUrl: player.imageUrl, stakeTier: currentStake, mode, rank: currentRank });
+                    socket.emit('matchFound', { roomId: room.id, playerIndex: 0, opponentId: opponent.userId, opponentImageUrl: opponent.imageUrl, stakeTier: currentStake, mode, rank: currentRank });
+                    io.to(opponent.socketId).emit('matchFound', { roomId: room.id, playerIndex: 1, opponentId: player.userId, opponentImageUrl: player.imageUrl, stakeTier: currentStake, mode, rank: currentRank });
 
                     setTimeout(() => startCountdown(room.id), 1000);
                 } else {
@@ -218,6 +218,12 @@ app.prepare().then(() => {
             const opponentSocket = room.players.find(p => p.socketId !== socket.id)?.socketId;
 
             if (accepted && requesterSocket && opponentSocket) {
+                // CLEAR CLEANUP TIMER IF RE-MATCHING
+                if (room.cleanupTimer) {
+                    clearTimeout(room.cleanupTimer);
+                    room.cleanupTimer = null;
+                }
+
                 if (!(await processEntryFee(room.players[0].userId, room.mode, room.stakeTier)) ||
                     !(await processEntryFee(room.players[1].userId, room.mode, room.stakeTier))) {
                     io.to(requesterSocket).emit('matchError', 'Recursos insuficientes.');
@@ -440,7 +446,7 @@ app.prepare().then(() => {
             }
         });
 
-        setTimeout(() => room.players.forEach(p => { if (activeRooms.get(p.socketId) === room) activeRooms.delete(p.socketId); }), 15000); // Reduced cleanup time as suggested
+        room.cleanupTimer = setTimeout(() => room.players.forEach(p => { if (activeRooms.get(p.socketId) === room) activeRooms.delete(p.socketId); }), 15000); // Store timeout ref
     }
 
     httpServer.once('error', (err) => { console.error(err); process.exit(1); }).listen(port, () => { console.log(`> Ready on http://${hostname}:${port}`); });
