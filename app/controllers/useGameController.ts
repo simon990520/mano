@@ -228,8 +228,13 @@ export const useGameController = (
         });
 
         socket.on('reconnectSuccess', (data: any) => {
+            console.log('[GAME_STATUS] Reconnection successful, restoring state:', data);
             setGameState(data.state || 'playing');
-            // ... additional sync if needed
+            if (data.opponentImageUrl) setOpponentImageUrl(data.opponentImageUrl);
+            if (data.opponentId) setOpponentId(data.opponentId);
+            setPlayerScore(data.myScore || 0);
+            setOpponentScore(data.opScore || 0);
+            setRound(data.currentRound || 1);
         });
 
         socket.on('opponentLeft', () => {
