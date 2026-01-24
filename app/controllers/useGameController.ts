@@ -80,6 +80,7 @@ export const useGameController = (
             setRound(1);
             setRematchRequested(false);
             setRematchStatus('');
+            setIsOpponentDisconnected(false); // Safeguard
             playSound('/sounds/voices/announcer/mach.mp3');
 
             if (data.stakeTier) {
@@ -114,6 +115,7 @@ export const useGameController = (
         socket.on('roundStart', (roundNum: number) => {
             setRound(roundNum);
             setGameState('playing');
+            setIsOpponentDisconnected(false); // Clear if stuck
             setChoiceMade(false);
             setPlayerChoice(null);
             setOpponentChoice(null);
@@ -230,6 +232,7 @@ export const useGameController = (
         socket.on('reconnectSuccess', (data: any) => {
             console.log('[GAME_STATUS] Reconnection successful, restoring state:', data);
             setGameState(data.state || 'playing');
+            setIsOpponentDisconnected(!!data.isOpponentDisconnected);
             if (data.opponentImageUrl) setOpponentImageUrl(data.opponentImageUrl);
             if (data.opponentId) setOpponentId(data.opponentId);
             setPlayerScore(data.myScore || 0);

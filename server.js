@@ -331,7 +331,8 @@ app.prepare().then(() => {
                         myScore: player.score,
                         opScore: opponent.score,
                         opponentId: opponent.userId,
-                        opponentImageUrl: opponent.imageUrl
+                        opponentImageUrl: opponent.imageUrl,
+                        isOpponentDisconnected: !!opponent.disconnected
                     });
                     io.to(opponent.socketId).emit('opponentReconnected');
 
@@ -427,7 +428,7 @@ app.prepare().then(() => {
             const { data: p } = await supabase.from('profiles').select(currency).eq('id', player.userId).single();
             if (p) await supabase.from('profiles').update({ [currency]: p[currency] + room.stakeTier }).eq('id', player.userId);
         }
-        io.to(room.id).emit('matchError', 'Cancelada por inactividad. Reembolsado.');
+        io.to(room.id).emit('matchError', 'Partida cancelada por inactividad mutua. Reembolsado.');
         setTimeout(() => room.players.forEach(p => activeRooms.delete(p.socketId)), 2000);
     }
 
