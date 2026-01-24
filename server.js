@@ -324,8 +324,15 @@ app.prepare().then(() => {
                     activeRooms.set(socket.id, room);
                     if (room.rematchRequestedBy === oldSocketId) room.rematchRequestedBy = socket.id;
                     socket.join(room.id);
-                    socket.emit('reconnectSuccess', { roomState: room, currentRound: room.round, myScore: player.score, opScore: room.players.find(p => p.userId !== userId).score });
                     const opponent = room.players.find(p => p.userId !== userId);
+                    socket.emit('reconnectSuccess', {
+                        roomState: room,
+                        currentRound: room.round,
+                        myScore: player.score,
+                        opScore: opponent.score,
+                        opponentId: opponent.userId,
+                        opponentImageUrl: opponent.imageUrl
+                    });
                     io.to(opponent.socketId).emit('opponentReconnected');
 
                     // RESUME GAME
@@ -412,6 +419,7 @@ app.prepare().then(() => {
     }
 
     async function refundAndEndGame(room) {
+        if (room.players.some(p => p.disconnected)) return; // BLOCK: Forfeit win takes priority
         room.state = 'gameOver';
         if (room.turnTimerInterval) clearInterval(room.turnTimerInterval);
         const currency = room.mode === 'casual' ? 'coins' : 'gems';
