@@ -354,12 +354,21 @@ app.prepare().then(() => {
     function startCountdown(roomId) {
         const room = findRoomById(roomId);
         if (!room) return;
+
+        // SANITIZE: Clear existing interval
+        if (room.countdownInterval) {
+            clearInterval(room.countdownInterval);
+            room.countdownInterval = null;
+        }
+
         room.state = 'countdown';
         room.countdown = 3;
-        const interval = setInterval(() => {
+
+        room.countdownInterval = setInterval(() => {
             io.to(room.id).emit('countdown', room.countdown);
             if (room.countdown === 0) {
-                clearInterval(interval);
+                clearInterval(room.countdownInterval);
+                room.countdownInterval = null;
                 room.nextStepTimeout = setTimeout(() => startRound(room), 100); // Small delay to sync
             }
             room.countdown--;
@@ -446,6 +455,10 @@ app.prepare().then(() => {
         if (room.reconnectInterval) {
             clearInterval(room.reconnectInterval);
             room.reconnectInterval = null;
+        }
+        if (room.countdownInterval) {
+            clearInterval(room.countdownInterval);
+            room.countdownInterval = null;
         }
         if (room.turnTimerInterval) {
             clearInterval(room.turnTimerInterval);

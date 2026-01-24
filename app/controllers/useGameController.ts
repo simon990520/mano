@@ -58,6 +58,9 @@ export const useGameController = (
     useEffect(() => {
         if (!socket) return;
 
+        // AUTO-RECONNECT CHECK ON MOUNT/RECOVERY
+        socket.emit('checkReconnection');
+
         socket.on('matchError', (msg: string) => {
             console.error('[SOCKET_INFO] Match error:', msg);
             alert(msg);
@@ -145,6 +148,7 @@ export const useGameController = (
             console.log('[GAME_STATUS] Game Over:', data);
             setGameWinner(data.winner);
             setGameState('gameOver');
+            setIsOpponentDisconnected(false); // HIDE DISCONNECTION MODAL
 
             // Trigger Economy Update
             if (onGameOverUpdate) onGameOverUpdate(data);
