@@ -19,7 +19,8 @@ export const useGameController = (
     const [playerChoice, setPlayerChoice] = useState<Choice | null>(null);
     const [opponentChoice, setOpponentChoice] = useState<Choice | null>(null);
     const [roundWinner, setRoundWinner] = useState<'player' | 'opponent' | 'tie' | null>(null);
-    const [gameWinner, setGameWinner] = useState<'player' | 'opponent' | null>(null);
+    const [gameWinner, setGameWinner] = useState<'player' | 'opponent' | 'tie' | null>(null);
+    const [inactivityRefund, setInactivityRefund] = useState(false);
     const [choiceMade, setChoiceMade] = useState(false);
     const [opponentImageUrl, setOpponentImageUrl] = useState<string | null>(null);
     const [opponentId, setOpponentId] = useState<string | null>(null);
@@ -34,6 +35,9 @@ export const useGameController = (
     // Animation State
     const [showRewardAnim, setShowRewardAnim] = useState(false);
     const [rewardData, setRewardData] = useState<{ type: 'coins' | 'gems' | 'rp', amount: number, isWin: boolean } | null>(null);
+
+    // Refs para limpiar timeouts pendientes
+    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Lobby/Matchmaking State
     const [gameMode, setGameMode] = useState<'casual' | 'ranked'>('casual');
@@ -146,16 +150,25 @@ export const useGameController = (
             }, 400);
         });
 
-        socket.on('gameOver', (data: GameOverData) => {
+        socket.on('gameOver', (data: GameOverData & { inactivityRefund?: boolean }) => {
             console.log('[GAME_STATUS] Game Over:', data);
             setGameWinner(data.winner);
             setGameState('gameOver');
             setIsOpponentDisconnected(false); // HIDE DISCONNECTION MODAL
+            setInactivityRefund(data.inactivityRefund || false);
 
             // Trigger Economy Update
             if (onGameOverUpdate) onGameOverUpdate(data);
 
-            if (data.prize || data.rpChange || (data.mode === 'casual' && data.stake)) {
+            // CRÍTICO: No mostrar animación de recompensa si:
+            // 1. Es un empate por inactividad (inactivityRefund flag)
+            // 2. El resultado es 'tie' (cualquier tipo de empate)
+            // 3. No hay premio ni cambio de RP
+            const shouldShowReward = !data.inactivityRefund
+                && (data.winner as string) !== 'tie'
+                && (data.prize || data.rpChange || (data.mode === 'casual' && data.stake));
+
+            if (shouldShowReward) {
                 const isWinner = data.winner === 'player';
                 let rewardType: 'coins' | 'gems' | 'rp' = 'coins';
                 let rewardAmount = 0;
@@ -174,22 +187,27 @@ export const useGameController = (
                     setRewardData({ type: rewardType, amount: rewardAmount, isWin: isWinner });
                     setShowRewardAnim(true);
                 }
+            } else {
+                // Asegurar que la animación esté oculta para empates/reembolsos
+                setShowRewardAnim(false);
+                setRewardData(null);
             }
 
             setTimeout(() => {
                 if (data.winner === 'player') playSound('/sounds/voices/announcer/win_game.mp3');
-                else playSound('/sounds/voices/announcer/lose_game.mp3');
+                else if (data.winner === 'opponent') playSound('/sounds/voices/announcer/lose_game.mp3');
+                else if (data.winner === 'tie') playSound('/sounds/sfx/tie.mp3');
             }, 500);
         });
 
         socket.on('rematchRequested', () => {
             console.log('[REMATCH] Received request from opponent');
-            setRematchStatus('Opponent wants a rematch!');
+            setRematchStatus('¡El oponente quiere una revancha!');
         });
 
         socket.on('rematchAccepted', () => {
             console.log('[REMATCH] Accepted! Starting new game sequence...');
-            setRematchStatus('Rematch accepted! Starting new game...');
+            setRematchStatus('¡Revancha aceptada! Iniciando nueva partida...');
             if (checkProfile) checkProfile();
 
             setTimeout(() => {
@@ -210,7 +228,7 @@ export const useGameController = (
 
         socket.on('rematchDeclined', () => {
             console.log('[REMATCH] Opponent declined');
-            setRematchStatus('Opponent declined the rematch');
+            setRematchStatus('El oponente rechazó la revancha');
             setTimeout(() => {
                 setGameState('lobby');
             }, 2000);
@@ -224,25 +242,81 @@ export const useGameController = (
             setRematchRequested(false);
         });
 
-        socket.on('opponentReconnected', () => {
-            console.log('[GAME_STATUS] Opponent reconnected!');
+        socket.on('opponentReconnected', (data?: { opponentImageUrl?: string, opponentId?: string }) => {
+            console.log('[GAME_STATUS] Opponent reconnected!', data);
             setIsOpponentDisconnected(false);
+            // Actualizar imagen del oponente si se proporciona
+            if (data?.opponentImageUrl) {
+                setOpponentImageUrl(data.opponentImageUrl);
+            }
+            if (data?.opponentId) {
+                setOpponentId(data.opponentId);
+            }
         });
 
         socket.on('reconnectSuccess', (data: any) => {
             console.log('[GAME_STATUS] Reconnection successful, restoring state:', data);
-            setGameState(data.state || 'playing');
-            setIsOpponentDisconnected(!!data.isOpponentDisconnected);
-            if (data.opponentImageUrl) setOpponentImageUrl(data.opponentImageUrl);
+
+            // CRÍTICO: Limpiar timeout de reconexión anterior si existe
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+                reconnectTimeoutRef.current = null;
+                console.log('[RECONNECT] Cleared previous reconnect timeout');
+            }
+
+            // PASO 1: Limpiar estado actual y animaciones pendientes
+            setIsOpponentDisconnected(false);
+            setShowCollision(false);
+            setShowRewardAnim(false);
+            setRewardData(null);
+            setRematchRequested(false);
+            setRematchStatus('');
+
+            // PASO 2: Restaurar información del oponente PRIMERO
+            if (data.opponentImageUrl) {
+                setOpponentImageUrl(data.opponentImageUrl);
+            } else {
+                // Fallback: buscar en roomState
+                const opponent = data.roomState?.players?.find((p: any) => p.userId !== user?.id);
+                if (opponent?.imageUrl) {
+                    setOpponentImageUrl(opponent.imageUrl);
+                }
+            }
             if (data.opponentId) setOpponentId(data.opponentId);
+
+            // PASO 3: Restaurar scores y round
             setPlayerScore(data.myScore || 0);
             setOpponentScore(data.opScore || 0);
             setRound(data.currentRound || 1);
+
+            // PASO 4: Limpiar elecciones para permitir nueva jugada
+            setPlayerChoice(null);
+            setOpponentChoice(null);
+            setChoiceMade(false);
+            setRoundWinner(null);
+
+            // PASO 5: Establecer el estado del juego basado en el servidor
+            // Importante: establecer esto AL FINAL para evitar race conditions
+            const serverState = data.state || data.roomState?.state || 'playing';
+            console.log(`[RECONNECT] Setting game state to: ${serverState}`);
+
+            // Pequeño delay para asegurar que todos los states se hayan actualizado
+            reconnectTimeoutRef.current = setTimeout(() => {
+                setGameState(serverState);
+
+                // Si el estado es 'playing', configurar timer
+                if (serverState === 'playing') {
+                    setTurnTimer(5);
+                }
+                reconnectTimeoutRef.current = null;
+            }, 100);
+
+            console.log('[RECONNECT] State restoration complete, ready to resume');
         });
 
         socket.on('opponentLeft', () => {
             console.log('[GAME_STATUS] Opponent left');
-            setRematchStatus('Opponent left for a new game.');
+            setRematchStatus('El oponente se fue a una nueva partida.');
             setRematchRequested(false);
         });
 
@@ -301,7 +375,7 @@ export const useGameController = (
             playSound('/sounds/sfx/click.mp3');
             socket.emit('requestRematch');
             setRematchRequested(true);
-            setRematchStatus('Waiting for opponent response...');
+            setRematchStatus('Esperando respuesta del oponente...');
         }
     };
 
@@ -313,7 +387,7 @@ export const useGameController = (
             if (accepted) {
                 setRematchStatus('Rematch accepted! Starting new game...');
             } else {
-                setRematchStatus('You declined the rematch');
+                setRematchStatus('Rechazaste la revancha');
                 setTimeout(() => {
                     setGameState('lobby');
                 }, 2000);
@@ -353,6 +427,7 @@ export const useGameController = (
         playerScore,
         opponentScore,
         round,
+        inactivityRefund,
         turnTimer,
         hands: { player: playerChoice, opponent: opponentChoice },
         roundWinner,

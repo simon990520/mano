@@ -117,11 +117,11 @@ export const GameArena: React.FC<GameArenaProps> = ({
                         </div>
                     )}
                     {gameState === 'playing' && (
-                        <div className="game-status-text" style={{ fontSize: '1.5rem', fontWeight: 900 }}>ROUND {round}</div>
+                        <div className="game-status-text" style={{ fontSize: '1.5rem', fontWeight: 900 }}>RONDA {round}</div>
                     )}
                     {(gameState === 'roundResult') && (
                         <div className="game-status-text result" style={{ fontSize: '2.5rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '4px' }}>
-                            {roundWinner === 'player' ? 'WIN' : roundWinner === 'opponent' ? 'LOSS' : 'TIE'}
+                            {roundWinner === 'player' ? 'GANASTE' : roundWinner === 'opponent' ? 'PERDISTE' : 'EMPATE'}
                         </div>
                     )}
                 </div>
@@ -171,7 +171,7 @@ export const GameArena: React.FC<GameArenaProps> = ({
 
             {gameState === 'playing' && (
                 <div className="center-content">
-                    <h1 className="game-subtitle">FIGHT</h1>
+                    <h1 className="game-subtitle">LUCHA</h1>
                 </div>
             )}
         </div>

@@ -210,7 +210,7 @@ export default function Home() {
                             ROCK<br />PAPER<br />SCISSORS
                         </h1>
                         <p style={{ fontSize: '1.2rem', opacity: 0.8, textAlign: 'center' }}>
-                            Searching for opponent<span className="waiting-dots"></span>
+                            Buscando oponente<span className="waiting-dots"></span>
                         </p>
                         <button
                             className="btn-secondary"
@@ -273,6 +273,7 @@ export default function Home() {
                     onRematchResponse={gameActions.respondRematch}
                     showRewardAnim={gameData.reward.show}
                     rewardData={gameData.reward.data}
+                    inactivityRefund={gameData.inactivityRefund}
                 />
             )}
         </>
