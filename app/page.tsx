@@ -18,6 +18,7 @@ import { LeaderboardModal } from '@/app/components/Modals/LeaderboardModal';
 import { OnboardingModal } from '@/app/components/Modals/OnboardingModal';
 import { GameOverModal } from '@/app/components/Modals/GameOverModal';
 import { PlayerStatsModal } from '@/app/components/Modals/PlayerStatsModal';
+import { ErrorModal } from '@/app/components/Modals/ErrorModal';
 
 export default function Home() {
     const { user, isSignedIn } = useUser();
@@ -276,6 +277,13 @@ export default function Home() {
                     inactivityRefund={gameData.inactivityRefund}
                 />
             )}
+
+            <ErrorModal
+                isOpen={gameData.errorModal.isOpen}
+                title={gameData.errorModal.title}
+                message={gameData.errorModal.message}
+                onClose={gameActions.closeError}
+            />
         </>
     );
 }
