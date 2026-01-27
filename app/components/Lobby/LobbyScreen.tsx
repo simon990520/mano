@@ -81,11 +81,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                 <SignedOut>
                     <SignInButton mode="modal">
                         <button className="btn-primary">
-                            START
+                            INICIAR
                         </button>
                     </SignInButton>
                     <p style={{ marginTop: '15px', opacity: 0.6, fontSize: '0.9rem' }}>
-                        Sign in required to play
+                        Inicia sesión para jugar
                     </p>
                 </SignedOut>
 

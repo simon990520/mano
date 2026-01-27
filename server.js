@@ -4,7 +4,7 @@ const { parse } = require('url');
 const next = require('next');
 const { Server } = require('socket.io');
 
-const { supabase, processEntryFee, recordMatch, incrementPlayerStats } = require('./lib/supabase-server');
+const { supabase, processEntryFee, refundEntryFee, processEntryFeeAtomic, recordMatch, incrementPlayerStats } = require('./lib/supabase-server');
 const { clerkClient, authMiddleware } = require('./lib/clerk-server');
 const { determineWinner, getRankByRp } = require('./game/engine');
 const { waitingPlayers, waitingRanked, createPlayer, removeFromQueue } = require('./game/matchmaker');
@@ -163,10 +163,11 @@ app.prepare().then(() => {
                     socket.join(room.id);
                     io.sockets.sockets.get(opponent.socketId)?.join(room.id);
 
-                    if (!(await processEntryFee(player.userId, mode, currentStake)) ||
-                        !(await processEntryFee(opponent.userId, mode, currentStake))) {
-                        socket.emit('matchError', 'Error al procesar la entrada.');
-                        io.to(opponent.socketId).emit('matchError', 'Error al procesar la entrada.');
+                    // Usar proceso atómico para garantizar que ambos paguen o ninguno
+                    const feeResult = await processEntryFeeAtomic([player, opponent], mode, currentStake);
+                    if (!feeResult.success) {
+                        socket.emit('matchError', 'Error al procesar la entrada. Recursos insuficientes.');
+                        io.to(opponent.socketId).emit('matchError', 'Error al procesar la entrada. Recursos insuficientes.');
                         return;
                     }
 
@@ -215,6 +216,7 @@ app.prepare().then(() => {
             if (!room || !room.rematchRequested) return;
 
             const requesterSocket = room.rematchRequestedBy;
+            const accepterSocket = socket.id; // El que responde es el que acepta
             const opponentSocket = room.players.find(p => p.socketId !== socket.id)?.socketId;
 
             if (accepted && requesterSocket && opponentSocket) {
@@ -224,17 +226,42 @@ app.prepare().then(() => {
                     room.cleanupTimer = null;
                 }
 
-                if (!(await processEntryFee(room.players[0].userId, room.mode, room.stakeTier)) ||
-                    !(await processEntryFee(room.players[1].userId, room.mode, room.stakeTier))) {
-                    io.to(requesterSocket).emit('matchError', 'Recursos insuficientes.');
-                    io.to(opponentSocket).emit('matchError', 'Recursos insuficientes.');
+                // CRÍTICO: Obtener los jugadores correctos por socketId, no por índice
+                const requesterPlayer = room.players.find(p => p.socketId === requesterSocket);
+                const accepterPlayer = room.players.find(p => p.socketId === accepterSocket);
+
+                if (!requesterPlayer || !accepterPlayer) {
+                    console.error('[REMATCH] Could not find players for rematch');
+                    return;
+                }
+
+                // Validación: asegurar que son dos jugadores diferentes
+                if (requesterPlayer.userId === accepterPlayer.userId) {
+                    console.error('[REMATCH] ERROR: Requester and accepter are the same player!');
+                    return;
+                }
+
+                // Validar y descontar de forma atómica con rollback automático
+                console.log(`[REMATCH] Processing entry fees for rematch - Mode: ${room.mode}, Stake: ${room.stakeTier}`);
+                console.log(`[REMATCH] Requester: ${requesterPlayer.userId} (socket: ${requesterSocket})`);
+                console.log(`[REMATCH] Accepter: ${accepterPlayer.userId} (socket: ${accepterSocket})`);
+                console.log(`[REMATCH] Charging BOTH players: [${requesterPlayer.userId}, ${accepterPlayer.userId}]`);
+
+                const feeResult = await processEntryFeeAtomic([requesterPlayer, accepterPlayer], room.mode, room.stakeTier);
+                console.log(`[REMATCH] Entry fee result:`, feeResult);
+
+                if (!feeResult.success) {
+                    console.error('[REMATCH] Entry fee failed, cancelling rematch');
+                    io.to(requesterSocket).emit('matchError', 'Recursos insuficientes para la revancha.');
+                    io.to(accepterSocket).emit('matchError', 'Recursos insuficientes para la revancha.');
                     activeRooms.delete(room.players[0].socketId);
                     activeRooms.delete(room.players[1].socketId);
                     return;
                 }
+                console.log(`[REMATCH] Entry fees successfully deducted for both players:`, feeResult.refunds);
 
                 io.to(requesterSocket).emit('rematchAccepted');
-                io.to(opponentSocket).emit('rematchAccepted');
+                io.to(accepterSocket).emit('rematchAccepted');
 
                 setTimeout(() => {
                     // CLEAR ANY PENDING TIMEOUTS ON REMATCH
@@ -325,23 +352,34 @@ app.prepare().then(() => {
                     if (room.rematchRequestedBy === oldSocketId) room.rematchRequestedBy = socket.id;
                     socket.join(room.id);
                     const opponent = room.players.find(p => p.userId !== userId);
+                    console.log(`[RECONNECT] Player ${userId} reconnected. Opponent: ${opponent.userId}, Opponent Image: ${opponent.imageUrl}`);
                     socket.emit('reconnectSuccess', {
                         roomState: room,
+                        state: room.state, // Agregar el estado actual de la sala
                         currentRound: room.round,
                         myScore: player.score,
                         opScore: opponent.score,
                         opponentId: opponent.userId,
-                        opponentImageUrl: opponent.imageUrl,
+                        opponentImageUrl: opponent.imageUrl || null, // Asegurar que siempre se envíe
                         isOpponentDisconnected: !!opponent.disconnected
                     });
-                    io.to(opponent.socketId).emit('opponentReconnected');
+                    // Enviar actualización de imagen también al oponente que nunca se desconectó
+                    console.log(`[RECONNECT] Sending opponent reconnected event to ${opponent.socketId} with image: ${player.imageUrl}`);
+                    io.to(opponent.socketId).emit('opponentReconnected', {
+                        opponentImageUrl: player.imageUrl,
+                        opponentId: player.userId
+                    });
 
-                    // RESUME GAME
-                    if (room.state === 'playing') {
-                        startRound(room);
-                    } else if (room.state === 'countdown') {
-                        startCountdown(room.id);
-                    }
+                    // RESUME GAME - Asegurar que el cliente esté listo antes de reanudar
+                    setTimeout(() => {
+                        if (room.state === 'playing') {
+                            // Reiniciar el round actual para que ambos jugadores puedan elegir
+                            room.players.forEach(p => p.choice = null);
+                            startRound(room);
+                        } else if (room.state === 'countdown') {
+                            startCountdown(room.id);
+                        }
+                    }, 1000); // Aumentado a 1 segundo para asegurar que el cliente procese reconnectSuccess
                     return;
                 }
             }
@@ -422,14 +460,100 @@ app.prepare().then(() => {
     async function refundAndEndGame(room) {
         if (room.players.some(p => p.disconnected)) return; // BLOCK: Forfeit win takes priority
         room.state = 'gameOver';
-        if (room.turnTimerInterval) clearInterval(room.turnTimerInterval);
-        const currency = room.mode === 'casual' ? 'coins' : 'gems';
-        for (const player of room.players) {
-            const { data: p } = await supabase.from('profiles').select(currency).eq('id', player.userId).single();
-            if (p) await supabase.from('profiles').update({ [currency]: p[currency] + room.stakeTier }).eq('id', player.userId);
+
+        // CLEAR ALL INTERVALS/TIMEOUTS
+        if (room.reconnectInterval) {
+            clearInterval(room.reconnectInterval);
+            room.reconnectInterval = null;
         }
-        io.to(room.id).emit('matchError', 'Partida cancelada por inactividad mutua. Reembolsado.');
-        setTimeout(() => room.players.forEach(p => activeRooms.delete(p.socketId)), 2000);
+        if (room.countdownInterval) {
+            clearInterval(room.countdownInterval);
+            room.countdownInterval = null;
+        }
+        if (room.turnTimerInterval) clearInterval(room.turnTimerInterval);
+        if (room.nextStepTimeout) {
+            clearTimeout(room.nextStepTimeout);
+            room.nextStepTimeout = null;
+        }
+
+        const currency = room.mode === 'casual' ? 'coins' : 'gems';
+        const [p1, p2] = room.players;
+
+        // Reembolsar a ambos jugadores
+        const refunds = await Promise.all(
+            room.players.map(async (player) => {
+                const { data: p } = await supabase.from('profiles').select(currency).eq('id', player.userId).single();
+                if (p) {
+                    const { error } = await supabase.from('profiles').update({ [currency]: (p[currency] || 0) + room.stakeTier }).eq('id', player.userId);
+                    if (error) {
+                        console.error(`[SERVER_ECONOMY] Refund failed for ${player.userId}:`, error.message);
+                        return { success: false, userId: player.userId };
+                    }
+                    return { success: true, userId: player.userId };
+                }
+                return { success: false, userId: player.userId };
+            })
+        );
+
+        // Obtener datos finales de ambos jugadores
+        const getFinalData = async (player) => {
+            const { data: profile } = await supabase.from('profiles').select('coins, gems').eq('id', player.userId).single();
+            return {
+                newCoins: profile?.coins || 0,
+                newGems: profile?.gems || 0,
+                prize: 0, // No hay premio en empate por inactividad
+                rpChange: 0,
+                newRp: profile?.rp || 0,
+                newRank: profile?.rank_name || 'BRONCE'
+            };
+        };
+
+        const [p1Final, p2Final] = await Promise.all([getFinalData(p1), getFinalData(p2)]);
+
+        // Emitir gameOver con empate para mostrar el modal correcto - MISMO EVENTO PARA AMBOS
+        const gameOverData = {
+            winner: 'tie', // Empate por inactividad
+            finalScore: {
+                player: p1.score,
+                opponent: p2.score
+            },
+            mode: room.mode,
+            stake: room.stakeTier,
+            inactivityRefund: true, // Flag para indicar que fue reembolso por inactividad
+            prize: 0,
+            rpChange: 0
+        };
+
+        // Enviar el MISMO evento a ambos jugadores con sus datos finales respectivos
+        room.players.forEach(p => {
+            if (!p.disconnected) {
+                const res = p.userId === p1.userId ? p1Final : p2Final;
+                // Ajustar finalScore para que cada jugador vea su score como "player"
+                const adjustedScore = p.userId === p1.userId
+                    ? { player: p1.score, opponent: p2.score }
+                    : { player: p2.score, opponent: p1.score };
+
+                io.to(p.socketId).emit('gameOver', {
+                    ...gameOverData,
+                    finalScore: adjustedScore,
+                    ...res
+                });
+            }
+        });
+
+        // Registrar el match como empate
+        await recordMatch({
+            player1_id: p1.userId,
+            player2_id: p2.userId,
+            winner_id: null, // Empate
+            p1_score: p1.score,
+            p2_score: p2.score,
+            mode: room.mode,
+            stake: room.stakeTier,
+            created_at: new Date().toISOString()
+        });
+
+        room.cleanupTimer = setTimeout(() => room.players.forEach(p => { if (activeRooms.get(p.socketId) === room) activeRooms.delete(p.socketId); }), 15000);
     }
 
     async function resolveRound(room) {
@@ -449,10 +573,10 @@ app.prepare().then(() => {
             io.to(p.socketId).emit('roundResult', { winner: result === 'tie' ? 'tie' : (result === `player${idx + 1}` ? 'player' : 'opponent'), playerChoice: p.choice, opponentChoice: opp.choice, playerScore: p.score, opponentScore: opp.score, round: room.round });
         });
         if (p1.score >= 3 || p2.score >= 3) {
-            room.nextStepTimeout = setTimeout(() => endGame(room), 3000);
+            room.nextStepTimeout = setTimeout(() => endGame(room), 2000); // Reducido de 3s a 2s
         } else {
             room.round++;
-            room.nextStepTimeout = setTimeout(() => startCountdown(room.id), 4000);
+            room.nextStepTimeout = setTimeout(() => startCountdown(room.id), 2000); // Reducido de 4s a 2s
         }
     }
 

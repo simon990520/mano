@@ -18,7 +18,7 @@ export const ChoiceActions: React.FC<ChoiceActionsProps> = ({ disabled, onMakeCh
     return (
         <div className="choice-panel slide-up">
             <p className="choice-instruction">
-                {disabled ? 'WAITING...' : 'CHOOSE YOUR WEAPON'}
+                {disabled ? 'ESPERANDO...' : 'ELIGE TU ARMA'}
             </p>
             <div className="choices-row">
                 {/* Rock */}
@@ -29,7 +29,7 @@ export const ChoiceActions: React.FC<ChoiceActionsProps> = ({ disabled, onMakeCh
                     style={{ '--choice-color': '#ff4757' } as any}
                 >
                     <div className="choice-emoji">{CHOICE_EMOJIS.rock}</div>
-                    <div className="choice-name">ROCK</div>
+                    <div className="choice-name">PIEDRA</div>
                 </button>
 
                 {/* Paper */}
@@ -51,7 +51,7 @@ export const ChoiceActions: React.FC<ChoiceActionsProps> = ({ disabled, onMakeCh
                     style={{ '--choice-color': '#1e90ff' } as any}
                 >
                     <div className="choice-emoji">{CHOICE_EMOJIS.scissors}</div>
-                    <div className="choice-name">SCISSORS</div>
+                    <div className="choice-name">TIJERA</div>
                 </button>
             </div>
         </div>

@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 
 interface GameOverModalProps {
-    gameWinner: 'player' | 'opponent' | null;
+    gameWinner: 'player' | 'opponent' | 'tie' | null;
     rematchRequested: boolean;
     rematchStatus: string;
     onRequestRematch: () => void;
@@ -13,6 +13,7 @@ interface GameOverModalProps {
     // Reward Data
     showRewardAnim: boolean;
     rewardData: { type: 'coins' | 'gems' | 'rp', amount: number, isWin: boolean } | null;
+    inactivityRefund?: boolean; // Flag para indicar reembolso por inactividad
 }
 
 export const GameOverModal: React.FC<GameOverModalProps> = ({
@@ -24,8 +25,12 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
     onGoToLobby,
     onRematchResponse,
     showRewardAnim,
-    rewardData
+    rewardData,
+    inactivityRefund = false
 }) => {
+    const isTie = gameWinner === 'tie';
+    const isVictory = gameWinner === 'player';
+
     return (
         <div className="rematch-card">
             <motion.div
@@ -36,14 +41,27 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                     fontSize: '3.5rem',
                     fontWeight: 900,
                     marginBottom: '15px',
-                    color: gameWinner === 'player' ? '#00ff88' : '#ff4466',
-                    textShadow: `0 0 40px ${gameWinner === 'player' ? '#00ff88' : '#ff4466'}`,
+                    color: isTie ? '#ffd700' : (isVictory ? '#00ff88' : '#ff4466'),
+                    textShadow: `0 0 40px ${isTie ? '#ffd700' : (isVictory ? '#00ff88' : '#ff4466')}`,
                     textTransform: 'uppercase',
                     letterSpacing: '3px'
                 }}
             >
-                {gameWinner === 'player' ? 'VICTORY' : 'DEFEAT'}
+                {isTie ? 'EMPATE' : (isVictory ? 'VICTORIA' : 'DERROTA')}
             </motion.div>
+
+            {inactivityRefund && (
+                <p style={{
+                    marginBottom: '15px',
+                    fontSize: '1.1rem',
+                    opacity: 0.9,
+                    letterSpacing: '1px',
+                    color: '#ffd700',
+                    fontWeight: 600
+                }}>
+                    Partida cancelada por inactividad mutua. Reembolsado.
+                </p>
+            )}
 
             <p style={{
                 marginBottom: '30px',
@@ -52,37 +70,37 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                 letterSpacing: '1px',
                 color: 'rgba(255,255,255,0.8)'
             }}>
-                Play this opponent again?
+                {isTie ? 'The match ended in a tie.' : 'Play this opponent again?'}
             </p>
             <div className="game-over-buttons">
                 <button
                     className="game-action-btn active"
                     onClick={onRequestRematch}
-                    disabled={rematchRequested || rematchStatus === 'Opponent disconnected!'}
+                    disabled={rematchRequested || rematchStatus === '¡Oponente desconectado!'}
                 >
-                    {rematchRequested ? 'WAITING...' : 'REMATCH'}
+                    {rematchRequested ? 'ESPERANDO...' : 'REVANCHA'}
                 </button>
                 <button
                     className="game-action-btn"
                     onClick={onPlayAgain}
                 >
-                    START
+                    INICIAR
                 </button>
                 <button
                     className="game-action-btn"
                     onClick={onGoToLobby}
                 >
-                    MENU
+                    MENÚ
                 </button>
             </div>
 
             {rematchStatus && (
                 <div className="rematch-status" style={{ marginTop: '20px', color: 'var(--primary)', fontWeight: 600 }}>
                     {rematchStatus}
-                    {rematchStatus.includes('wants a rematch') && (
+                    {(rematchStatus.includes('wants a rematch') || rematchStatus.includes('quiere una revancha')) && (
                         <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '10px' }}>
-                            <button className="btn-primary" onClick={() => onRematchResponse(true)} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>Accept</button>
-                            <button className="btn-secondary" onClick={() => onRematchResponse(false)} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>Decline</button>
+                            <button className="btn-primary" onClick={() => onRematchResponse(true)} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>Aceptar</button>
+                            <button className="btn-secondary" onClick={() => onRematchResponse(false)} style={{ padding: '8px 20px', fontSize: '0.9rem' }}>Rechazar</button>
                         </div>
                     )}
                 </div>
