@@ -90,13 +90,75 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
 
 
     const handlePurchase = (type: 'coins' | 'gems', amount: number) => {
+        console.log(`[ECONOMY] handlePurchase triggered: ${type}, amount: ${amount}`);
+
         if (!isSignedIn || !user || !socket) {
-            console.error('[ECONOMY] Purchase failed: User not signed in or socket not connected');
+            console.error('[ECONOMY] Purchase failed: User not signed in or socket not connected', { isSignedIn, user: !!user, socketConnected: socket?.connected });
+            return;
+        }
+
+        // ADMOB REWARD INTERCEPTION
+        if (type === 'coins' && amount === 10) {
+            console.log('[ECONOMY] Intercepting for AdMob reward...');
+            playSound('/sounds/sfx/click.mp3');
+
+            const anyWindow = window as any;
+
+            // CHECK LOAD STATUS FIRST
+            if (anyWindow.admobStatus === 'error') {
+                console.error('[ADMOB] Fast-fail: SDK failed to load.');
+                alert('NO SE PUDO CARGAR EL ANUNCIO.\n\nCausa probable: Bloqueador de Anuncios activo (AdBlock, Brave Shield, etc).\n\nSolución: Desactiva el bloqueador para este sitio y recarga la página.');
+                return;
+            }
+
+            if (typeof anyWindow.adBreak === 'function') {
+                console.log('[ADMOB] window.adBreak found. Triggering adBreak call...');
+
+                // Fail-safe timeout (5 seconds)
+                const adBreakTimeout = setTimeout(() => {
+                    console.error('[ADMOB] TIMEOUT: adBreak called but no response within 5s');
+                    alert('El anuncio no responde. Revisa si tienes un bloqueador de anuncios activo.');
+                }, 5000);
+
+                try {
+                    anyWindow.adBreak({
+                        type: 'reward',
+                        name: 'get_10_coins_reward',
+                        beforeReward: (showAdFn: () => void) => {
+                            clearTimeout(adBreakTimeout);
+                            console.log('[ADMOB] beforeReward callback triggered. Showing ad...');
+                            showAdFn();
+                        },
+                        adViewed: () => {
+                            clearTimeout(adBreakTimeout);
+                            console.log('[ADMOB] adViewed callback triggered. Success!');
+                            socket.emit('purchase', { type: 'coins', amount: 10 });
+                            playSound('/sounds/sfx/win_round.mp3');
+                        },
+                        adDismissed: () => {
+                            clearTimeout(adBreakTimeout);
+                            console.warn('[ADMOB] adDismissed callback triggered. No reward.');
+                        },
+                        adError: (err: any) => {
+                            clearTimeout(adBreakTimeout);
+                            console.error('[ADMOB] adError callback triggered:', err);
+                            alert('No hay anuncios disponibles en este momento.');
+                        }
+                    });
+                } catch (err) {
+                    clearTimeout(adBreakTimeout);
+                    console.error('[ADMOB] EXCEPTION calling adBreak:', err);
+                    alert('Error técnico al iniciar el anuncio.');
+                }
+            } else {
+                console.error('[ADMOB] ERROR: window.adBreak is NOT a function or is undefined.');
+                alert('El sistema de anuncios (AdMob) no se ha cargado correctamente. Desactiva bloqueadores de publicidad.');
+            }
             return;
         }
 
         playSound('/sounds/sfx/click.mp3');
-        console.log(`[ECONOMY] Emitting purchase to server: ${type} +${amount}`);
+        console.log(`[ECONOMY] Normal purchase flow emitting: ${type} +${amount}`);
         socket.emit('purchase', { type, amount });
     };
 
