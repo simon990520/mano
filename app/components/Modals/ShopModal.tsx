@@ -30,17 +30,23 @@ export const ShopModal: React.FC<ShopModalProps> = ({ type, onClose, onPurchase 
                     <button className="close-btn" onClick={onClose}>×</button>
                 </div>
                 <div className="shop-grid">
-                    {amounts.map((amount) => (
-                        <button
-                            key={amount}
-                            className={`shop-item-btn ${type}`}
-                            onClick={() => onPurchase(type, amount)}
-                        >
-                            <span className="shop-item-icon">{icon}</span>
-                            <span className="shop-item-amount">+{amount}</span>
-                            <span className="shop-item-price">RELOAD</span>
-                        </button>
-                    ))}
+                    {amounts.map((amount) => {
+                        const isRewardedAd = type === 'coins' && amount === 10;
+                        return (
+                            <button
+                                key={amount}
+                                className={`shop-item-btn ${type} ${isRewardedAd ? 'rewarded-btn' : ''}`}
+                                onClick={() => onPurchase(type, amount)}
+                                style={isRewardedAd ? { border: '2px solid #ffd700', background: 'linear-gradient(45deg, #ff6b6b, #fca5a5)' } : undefined}
+                            >
+                                <span className="shop-item-icon">{icon}</span>
+                                <span className="shop-item-amount">+{amount}</span>
+                                <span className="shop-item-price">
+                                    {isRewardedAd ? 'GRATIS (ADS)' : 'RELOAD'}
+                                </span>
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
         </div>

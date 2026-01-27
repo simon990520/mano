@@ -9,6 +9,8 @@ export const metadata: Metadata = {
 import { ClerkProvider } from '@clerk/nextjs'
 import { dark } from '@clerk/themes'
 
+import GoogleAdsense from './components/GoogleAdsense'
+
 export default function RootLayout({
     children,
 }: {
@@ -17,7 +19,10 @@ export default function RootLayout({
     return (
         <ClerkProvider appearance={{ baseTheme: dark }}>
             <html lang="en" suppressHydrationWarning>
-                <body suppressHydrationWarning>{children}</body>
+                <body suppressHydrationWarning>
+                    {children}
+                    <GoogleAdsense />
+                </body>
             </html>
         </ClerkProvider>
     )
