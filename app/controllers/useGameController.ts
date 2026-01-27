@@ -36,6 +36,13 @@ export const useGameController = (
     const [showRewardAnim, setShowRewardAnim] = useState(false);
     const [rewardData, setRewardData] = useState<{ type: 'coins' | 'gems' | 'rp', amount: number, isWin: boolean } | null>(null);
 
+    // Error Modal State
+    const [errorModal, setErrorModal] = useState<{ isOpen: boolean, title: string, message: string }>({
+        isOpen: false,
+        title: '',
+        message: ''
+    });
+
     // Refs para limpiar timeouts pendientes
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -66,8 +73,13 @@ export const useGameController = (
         socket.emit('checkReconnection');
 
         socket.on('matchError', (msg: string) => {
-            console.error('[SOCKET_INFO] Match error:', msg);
-            alert(msg);
+            console.log('[SOCKET_INFO] Match info:', msg);
+            // Mostrar nuestro ErrorModal
+            setErrorModal({
+                isOpen: true,
+                title: 'RECURSOS INSUFICIENTES',
+                message: msg
+            });
             setGameState('lobby');
         });
 
@@ -439,6 +451,7 @@ export const useGameController = (
         showCollision,
         rematch: { requested: rematchRequested, status: rematchStatus },
         reward: { show: showRewardAnim, data: rewardData },
+        errorModal,
         currentMatchStake,
         actions: {
             findMatch: handleFindMatch,
@@ -447,6 +460,7 @@ export const useGameController = (
             requestRematch: handleRequestRematch,
             respondRematch: handleRematchResponse,
             playAgain: handlePlayAgain,
+            closeError: () => setErrorModal(prev => ({ ...prev, isOpen: false })),
             goToLobby
         }
     };
