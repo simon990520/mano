@@ -276,19 +276,20 @@ export const useGameController = (
                 console.log('[RECONNECT] Cleared previous reconnect timeout');
             }
 
-            // PASO 1: Limpiar estado actual y animaciones pendientes
+            // PASO 1: Limpiar TODOS los estados de la sesión anterior
             setIsOpponentDisconnected(false);
             setShowCollision(false);
             setShowRewardAnim(false);
             setRewardData(null);
             setRematchRequested(false);
             setRematchStatus('');
+            setGameWinner(null); // Limpiar ganador previo
+            setRoundWinner(null); // Limpiar ganador de ronda previo
 
-            // PASO 2: Restaurar información del oponente PRIMERO
+            // PASO 2: Restaurar información del oponente
             if (data.opponentImageUrl) {
                 setOpponentImageUrl(data.opponentImageUrl);
             } else {
-                // Fallback: buscar en roomState
                 const opponent = data.roomState?.players?.find((p: any) => p.userId !== user?.id);
                 if (opponent?.imageUrl) {
                     setOpponentImageUrl(opponent.imageUrl);
@@ -305,21 +306,19 @@ export const useGameController = (
             setPlayerChoice(null);
             setOpponentChoice(null);
             setChoiceMade(false);
-            setRoundWinner(null);
 
-            // PASO 5: Establecer el estado del juego basado en el servidor
-            // Importante: establecer esto AL FINAL para evitar race conditions
+            // PASO 5: Sincronizar el timer con el servidor
+            const serverTimer = data.turnTimer || 5;
+            setTurnTimer(serverTimer);
+            console.log(`[RECONNECT] Synchronized timer to server value: ${serverTimer}s`);
+
+            // PASO 6: Establecer el estado del juego basado en el servidor
             const serverState = data.state || data.roomState?.state || 'playing';
             console.log(`[RECONNECT] Setting game state to: ${serverState}`);
 
             // Pequeño delay para asegurar que todos los states se hayan actualizado
             reconnectTimeoutRef.current = setTimeout(() => {
                 setGameState(serverState);
-
-                // Si el estado es 'playing', configurar timer
-                if (serverState === 'playing') {
-                    setTurnTimer(5);
-                }
                 reconnectTimeoutRef.current = null;
             }, 100);
 

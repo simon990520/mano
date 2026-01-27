@@ -335,54 +335,84 @@ app.prepare().then(() => {
         });
 
         socket.on('checkReconnection', () => {
+            console.log(`[RECONNECT] Checking reconnection for user: ${userId}`);
             for (const [key, room] of activeRooms.entries()) {
-                const player = room.players.find(p => p.userId === userId && p.disconnected);
-                if (player) {
-                    // STOP RECONNECT COUNTDOWN
+                // Buscar jugador por userId, incluso si no está marcado como disconnected todavía
+                const player = room.players.find(p => p.userId === userId);
+
+                if (player && player.socketId !== socket.id) {
+                    console.log(`[RECONNECT] Found active room for ${userId}. Current state: ${room.state}`);
+
+                    // STOP RECONNECT COUNTDOWN si existe
                     if (room.reconnectInterval) {
                         clearInterval(room.reconnectInterval);
                         room.reconnectInterval = null;
+                        console.log('[RECONNECT] Cleared reconnect countdown');
                     }
 
+                    // Actualizar player data
                     player.disconnected = false;
                     const oldSocketId = player.socketId;
                     player.socketId = socket.id;
+
+                    // Actualizar activeRooms mapping
                     activeRooms.delete(oldSocketId);
                     activeRooms.set(socket.id, room);
-                    if (room.rematchRequestedBy === oldSocketId) room.rematchRequestedBy = socket.id;
+
+                    // Actualizar rematch requester si era este jugador
+                    if (room.rematchRequestedBy === oldSocketId) {
+                        room.rematchRequestedBy = socket.id;
+                    }
+
                     socket.join(room.id);
+
                     const opponent = room.players.find(p => p.userId !== userId);
-                    console.log(`[RECONNECT] Player ${userId} reconnected. Opponent: ${opponent.userId}, Opponent Image: ${opponent.imageUrl}`);
+                    console.log(`[RECONNECT] Player ${userId} reconnected. Opponent: ${opponent.userId}`);
+
+                    // Enviar datos de reconexión con timer sincronizado
                     socket.emit('reconnectSuccess', {
                         roomState: room,
-                        state: room.state, // Agregar el estado actual de la sala
+                        state: room.state,
                         currentRound: room.round,
                         myScore: player.score,
                         opScore: opponent.score,
                         opponentId: opponent.userId,
-                        opponentImageUrl: opponent.imageUrl || null, // Asegurar que siempre se envíe
-                        isOpponentDisconnected: !!opponent.disconnected
+                        opponentImageUrl: opponent.imageUrl || null,
+                        isOpponentDisconnected: !!opponent.disconnected,
+                        turnTimer: room.turnTimer || 5 // Enviar el timer actual del servidor
                     });
-                    // Enviar actualización de imagen también al oponente que nunca se desconectó
-                    console.log(`[RECONNECT] Sending opponent reconnected event to ${opponent.socketId} with image: ${player.imageUrl}`);
+
+                    // Notificar al oponente
+                    console.log(`[RECONNECT] Sending opponent reconnected event to ${opponent.socketId}`);
                     io.to(opponent.socketId).emit('opponentReconnected', {
                         opponentImageUrl: player.imageUrl,
                         opponentId: player.userId
                     });
 
-                    // RESUME GAME - Asegurar que el cliente esté listo antes de reanudar
+                    // RESUME GAME - Mejorado para manejar todos los estados
                     setTimeout(() => {
                         if (room.state === 'playing') {
-                            // Reiniciar el round actual para que ambos jugadores puedan elegir
+                            // Si estaba jugando, reiniciar el round actual
                             room.players.forEach(p => p.choice = null);
                             startRound(room);
                         } else if (room.state === 'countdown') {
                             startCountdown(room.id);
+                        } else if (room.state === 'roundResult') {
+                            // CRÍTICO: Si está en roundResult, recrear el timeout que avanza al siguiente round
+                            console.log('[RECONNECT] Recreating nextStepTimeout for roundResult state');
+                            const [p1, p2] = room.players;
+                            if (p1.score >= 3 || p2.score >= 3) {
+                                room.nextStepTimeout = setTimeout(() => endGame(room), 2000);
+                            } else {
+                                room.round++;
+                                room.nextStepTimeout = setTimeout(() => startCountdown(room.id), 2000);
+                            }
                         }
-                    }, 1000); // Aumentado a 1 segundo para asegurar que el cliente procese reconnectSuccess
+                    }, 1000); // Delay para asegurar que el cliente procese reconnectSuccess
                     return;
                 }
             }
+            console.log(`[RECONNECT] No active room found for ${userId}`);
         });
 
         socket.on('getPlayerStats', async (targetUserId) => {
