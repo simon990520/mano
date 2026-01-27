@@ -21,6 +21,7 @@ interface GameArenaProps {
     opponentId?: string | null;
     isOpponentDisconnected?: boolean;
     reconnectTimer?: number;
+    roundResultFlash?: 'win' | 'lose' | null;
 }
 
 const CHOICE_EMOJIS = {
@@ -47,10 +48,22 @@ export const GameArena: React.FC<GameArenaProps> = ({
     onShowStats,
     opponentId,
     isOpponentDisconnected,
-    reconnectTimer
+    reconnectTimer,
+    roundResultFlash
 }) => {
+    // Dynamic background style based on round result
+    const backgroundStyle: React.CSSProperties = roundResultFlash ? {
+        background: roundResultFlash === 'win'
+            ? 'linear-gradient(135deg, hsl(120, 65%, 20%), hsl(180, 55%, 15%))'
+            : 'linear-gradient(135deg, hsl(0, 65%, 20%), hsl(20, 55%, 15%))',
+        transition: 'background 0.3s ease-in-out'
+    } : {};
+
     return (
-        <div className={`game-container ${(gameState === 'roundResult' && showCollision) ? 'shake' : ''}`}>
+        <div
+            className={`game-container ${(gameState === 'roundResult' && showCollision) ? 'shake' : ''} ${roundResultFlash ? `flash-${roundResultFlash}` : ''}`}
+            style={backgroundStyle}
+        >
             {/* Integrated Vertical Score Bars */}
             {(gameState === 'playing' || gameState === 'roundResult' || gameState === 'countdown' || gameState === 'gameOver') && (
                 <>
