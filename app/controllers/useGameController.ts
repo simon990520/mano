@@ -28,6 +28,9 @@ export const useGameController = (
     const [reconnectTimer, setReconnectTimer] = useState(10);
     const [showCollision, setShowCollision] = useState<boolean>(false);
 
+    // Visual feedback state for round results
+    const [roundResultFlash, setRoundResultFlash] = useState<'win' | 'lose' | null>(null);
+
     // Rematch states
     const [rematchRequested, setRematchRequested] = useState<boolean>(false);
     const [rematchStatus, setRematchStatus] = useState<string>('');
@@ -155,6 +158,16 @@ export const useGameController = (
             setShowCollision(true);
             setTimeout(() => setShowCollision(false), 600);
             playSound('/sounds/sfx/collision.mp3');
+
+            // Trigger visual feedback based on round result
+            if (result.winner === 'player') {
+                setRoundResultFlash('win');
+                setTimeout(() => setRoundResultFlash(null), 500);
+            } else if (result.winner === 'opponent') {
+                setRoundResultFlash('lose');
+                setTimeout(() => setRoundResultFlash(null), 500);
+            }
+
             setTimeout(() => {
                 if (result.winner === 'player') playSound('/sounds/sfx/win_round.mp3');
                 else if (result.winner === 'opponent') playSound('/sounds/sfx/lose_round.mp3');
@@ -450,6 +463,7 @@ export const useGameController = (
         showCollision,
         rematch: { requested: rematchRequested, status: rematchStatus },
         reward: { show: showRewardAnim, data: rewardData },
+        roundResultFlash,
         errorModal,
         currentMatchStake,
         actions: {

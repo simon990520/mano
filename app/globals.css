@@ -89,6 +89,40 @@ body {
   }
 }
 
+/* Flash effect for round results */
+.flash-win {
+  box-shadow: 0 0 80px rgba(75, 255, 124, 0.8), 
+              0 30px 60px rgba(0, 0, 0, 0.5);
+  animation: glowWin 0.5s ease-out;
+}
+
+.flash-lose {
+  box-shadow: 0 0 80px rgba(255, 59, 79, 0.8), 
+              0 30px 60px rgba(0, 0, 0, 0.5);
+  animation: glowLose 0.5s ease-out;
+}
+
+@keyframes glowWin {
+  0%, 100% {
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 80px rgba(75, 255, 124, 0.8), 
+                0 30px 60px rgba(0, 0, 0, 0.5);
+  }
+}
+
+@keyframes glowLose {
+  0%, 100% {
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 80px rgba(255, 59, 79, 0.8), 
+                0 30px 60px rgba(0, 0, 0, 0.5);
+  }
+}
+
+
 /* Title styles */
 .game-title {
   font-size: 3.5rem;

@@ -245,6 +245,7 @@ export default function Home() {
                     opponentId={gameData.opponentId}
                     isOpponentDisconnected={gameData.isOpponentDisconnected}
                     reconnectTimer={gameData.reconnectTimer}
+                    roundResultFlash={gameData.roundResultFlash}
                 />
             )}
 
