@@ -7,9 +7,10 @@ export default function GoogleAdsense() {
         <>
             <Script
                 id="admob-sdk"
-                src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-app-pub-2148261210607684~3827281824"
+                src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2148261210607684"
                 strategy="afterInteractive"
                 data-adtest="on"
+                crossOrigin="anonymous"
                 onLoad={() => {
                     console.log('[ADMOB_SDK] Loaded successfully');
                     // @ts-ignore
@@ -30,7 +31,6 @@ export default function GoogleAdsense() {
                     };
                     window.adsbygoogle.push({
                         preloadAdBreaks: 'on',
-                        dataAdmobRewardedSlot: 'ca-app-pub-2148261210607684/2973533022',
                         onReady: () => { console.log('[ADMOB_SDK] SDK is ready'); }
                     });
                 `}

@@ -3,6 +3,7 @@ const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
 const { Server } = require('socket.io');
+const crypto = require('crypto');
 
 const { supabase, processEntryFee, refundEntryFee, processEntryFeeAtomic, recordMatch, incrementPlayerStats } = require('./lib/supabase-server');
 const { clerkClient, authMiddleware } = require('./lib/clerk-server');
@@ -19,15 +20,24 @@ const handle = app.getRequestHandler();
 
 const userSockets = new Map(); // userId -> socketId (Enforce single session)
 
+// Helper for parsing JSON body
+const getBody = (req) => new Promise((resolve) => {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+        try { resolve(JSON.parse(body)); } catch (e) { resolve({}); }
+    });
+});
+
 app.prepare().then(() => {
     const httpServer = createServer(async (req, res) => {
         try {
             const parsedUrl = parse(req.url, true);
             await handle(req, res, parsedUrl);
         } catch (err) {
-            console.error('Error occurred handling', req.url, err);
+            console.error('Error handling request:', err);
             res.statusCode = 500;
-            res.end('internal server error');
+            res.end('Internal Server Error');
         }
     });
 
@@ -39,6 +49,7 @@ app.prepare().then(() => {
     });
 
     io.use(authMiddleware);
+    process.io = io; // Expose io for Bold Webhook access
 
     io.on('connection', (socket) => {
         const userId = socket.userId;
@@ -75,8 +86,79 @@ app.prepare().then(() => {
             }
         });
 
+        socket.on('claimDailyReward', async () => {
+            try {
+                const { data: profile, error: fetchError } = await supabase
+                    .from('profiles')
+                    .select('coins, last_claimed_at, current_streak')
+                    .eq('id', userId)
+                    .single();
+
+                if (fetchError || !profile) {
+                    socket.emit('purchaseError', 'User profile not found');
+                    return;
+                }
+
+                const now = new Date();
+                const lastClaimed = profile.last_claimed_at ? new Date(profile.last_claimed_at) : null;
+
+                let newStreak = 1;
+                let canClaim = false;
+
+                if (!lastClaimed) {
+                    canClaim = true;
+                    newStreak = 1;
+                } else {
+                    // Reset hours/minutes for day comparison
+                    const lastDate = new Date(lastClaimed.getFullYear(), lastClaimed.getMonth(), lastClaimed.getDate());
+                    const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    const diffDays = Math.floor((nowDate - lastDate) / (1000 * 60 * 60 * 24));
+
+                    if (diffDays === 0) {
+                        socket.emit('purchaseError', 'Ya reclamaste tu recompensa hoy.');
+                        return;
+                    } else if (diffDays === 1) {
+                        // Consecutive day
+                        newStreak = (profile.current_streak || 0) + 1;
+                        if (newStreak > 7) newStreak = 1;
+                        canClaim = true;
+                    } else {
+                        // Lost streak
+                        newStreak = 1;
+                        canClaim = true;
+                    }
+                }
+
+                if (canClaim) {
+                    const reward = newStreak * 10;
+                    const newCoins = (profile.coins || 0) + reward;
+                    const claimedAt = now.toISOString();
+
+                    const { error: updateError } = await supabase
+                        .from('profiles')
+                        .update({
+                            coins: newCoins,
+                            last_claimed_at: claimedAt,
+                            current_streak: newStreak
+                        })
+                        .eq('id', userId);
+
+                    if (updateError) {
+                        socket.emit('purchaseError', 'Error al reclamar: ' + updateError.message);
+                    } else {
+                        socket.emit('rewardClaimed', { newCoins, streak: newStreak, claimedAt });
+                    }
+                }
+            } catch (err) {
+                console.error('[STREAK_ERROR]', err);
+                socket.emit('purchaseError', 'Internal Streak Error');
+            }
+        });
+
         socket.on('purchase', async (data) => {
             const { type, amount } = data;
+            // Legacy purchase logic - Keep for other gems/coins if needed via different flow
+            // But for amount 10 it will be handled by claimDailyReward via frontend intercept
             try {
                 const { data: profile, error: fetchError } = await supabase
                     .from('profiles')
@@ -163,7 +245,6 @@ app.prepare().then(() => {
                     socket.join(room.id);
                     io.sockets.sockets.get(opponent.socketId)?.join(room.id);
 
-                    // Usar proceso atómico para garantizar que ambos paguen o ninguno
                     const feeResult = await processEntryFeeAtomic([player, opponent], mode, currentStake);
                     if (!feeResult.success) {
                         socket.emit('matchError', 'Error al procesar la entrada. Recursos insuficientes.');
@@ -216,17 +297,15 @@ app.prepare().then(() => {
             if (!room || !room.rematchRequested) return;
 
             const requesterSocket = room.rematchRequestedBy;
-            const accepterSocket = socket.id; // El que responde es el que acepta
+            const accepterSocket = socket.id;
             const opponentSocket = room.players.find(p => p.socketId !== socket.id)?.socketId;
 
             if (accepted && requesterSocket && opponentSocket) {
-                // CLEAR CLEANUP TIMER IF RE-MATCHING
                 if (room.cleanupTimer) {
                     clearTimeout(room.cleanupTimer);
                     room.cleanupTimer = null;
                 }
 
-                // CRÍTICO: Obtener los jugadores correctos por socketId, no por índice
                 const requesterPlayer = room.players.find(p => p.socketId === requesterSocket);
                 const accepterPlayer = room.players.find(p => p.socketId === accepterSocket);
 
@@ -235,36 +314,24 @@ app.prepare().then(() => {
                     return;
                 }
 
-                // Validación: asegurar que son dos jugadores diferentes
                 if (requesterPlayer.userId === accepterPlayer.userId) {
                     console.error('[REMATCH] ERROR: Requester and accepter are the same player!');
                     return;
                 }
 
-                // Validar y descontar de forma atómica con rollback automático
-                console.log(`[REMATCH] Processing entry fees for rematch - Mode: ${room.mode}, Stake: ${room.stakeTier}`);
-                console.log(`[REMATCH] Requester: ${requesterPlayer.userId} (socket: ${requesterSocket})`);
-                console.log(`[REMATCH] Accepter: ${accepterPlayer.userId} (socket: ${accepterSocket})`);
-                console.log(`[REMATCH] Charging BOTH players: [${requesterPlayer.userId}, ${accepterPlayer.userId}]`);
-
                 const feeResult = await processEntryFeeAtomic([requesterPlayer, accepterPlayer], room.mode, room.stakeTier);
-                console.log(`[REMATCH] Entry fee result:`, feeResult);
-
                 if (!feeResult.success) {
-                    console.error('[REMATCH] Entry fee failed, cancelling rematch');
                     io.to(requesterSocket).emit('matchError', 'Recursos insuficientes para la revancha.');
                     io.to(accepterSocket).emit('matchError', 'Recursos insuficientes para la revancha.');
                     activeRooms.delete(room.players[0].socketId);
                     activeRooms.delete(room.players[1].socketId);
                     return;
                 }
-                console.log(`[REMATCH] Entry fees successfully deducted for both players:`, feeResult.refunds);
 
                 io.to(requesterSocket).emit('rematchAccepted');
                 io.to(accepterSocket).emit('rematchAccepted');
 
                 setTimeout(() => {
-                    // CLEAR ANY PENDING TIMEOUTS ON REMATCH
                     if (room.nextStepTimeout) {
                         clearTimeout(room.nextStepTimeout);
                         room.nextStepTimeout = null;
@@ -292,7 +359,6 @@ app.prepare().then(() => {
             }
         });
 
-        const WAITING_TIMEOUT = 10; // 10 seconds
         socket.on('disconnect', () => {
             if (userSockets.get(userId) === socket.id) userSockets.delete(userId);
             removeFromQueue(socket.id, userId);
@@ -305,18 +371,10 @@ app.prepare().then(() => {
                 const player = room.players.find(p => p.socketId === socket.id);
                 player.disconnected = true;
 
-                // PAUSE GAME & CLEAR NEXT STEPS
-                if (room.turnTimerInterval) {
-                    clearInterval(room.turnTimerInterval);
-                    room.turnTimerInterval = null;
-                }
-                if (room.nextStepTimeout) {
-                    clearTimeout(room.nextStepTimeout);
-                    room.nextStepTimeout = null;
-                }
+                if (room.turnTimerInterval) { clearInterval(room.turnTimerInterval); room.turnTimerInterval = null; }
+                if (room.nextStepTimeout) { clearTimeout(room.nextStepTimeout); room.nextStepTimeout = null; }
 
-                // START RECONNECT COUNTDOWN
-                let timeLeft = WAITING_TIMEOUT;
+                let timeLeft = 10;
                 if (opponent.socketId) io.to(opponent.socketId).emit('opponentDisconnected', { timeout: timeLeft * 1000 });
 
                 if (room.reconnectInterval) clearInterval(room.reconnectInterval);
@@ -327,7 +385,6 @@ app.prepare().then(() => {
                     if (timeLeft <= 0) {
                         clearInterval(room.reconnectInterval);
                         room.reconnectInterval = null;
-                        console.log(`[SERVER_GAME] Reconnect timeout for ${userId}. Forfeiting.`);
                         endGame(room, opponent.userId);
                     }
                 }, 1000);
@@ -335,94 +392,39 @@ app.prepare().then(() => {
         });
 
         socket.on('checkReconnection', () => {
-            console.log(`[RECONNECT] Checking reconnection for user: ${userId}`);
             for (const [key, room] of activeRooms.entries()) {
-                // Buscar jugador por userId, incluso si no está marcado como disconnected todavía
                 const player = room.players.find(p => p.userId === userId);
-
                 if (player && player.socketId !== socket.id) {
-                    console.log(`[RECONNECT] Found active room for ${userId}. Current state: ${room.state}`);
-
-                    // STOP RECONNECT COUNTDOWN si existe
-                    if (room.reconnectInterval) {
-                        clearInterval(room.reconnectInterval);
-                        room.reconnectInterval = null;
-                        console.log('[RECONNECT] Cleared reconnect countdown');
-                    }
-
-                    // Actualizar player data
+                    if (room.reconnectInterval) { clearInterval(room.reconnectInterval); room.reconnectInterval = null; }
                     player.disconnected = false;
                     const oldSocketId = player.socketId;
                     player.socketId = socket.id;
-
-                    // Actualizar activeRooms mapping
                     activeRooms.delete(oldSocketId);
                     activeRooms.set(socket.id, room);
-
-                    // Actualizar rematch requester si era este jugador
-                    if (room.rematchRequestedBy === oldSocketId) {
-                        room.rematchRequestedBy = socket.id;
-                    }
-
+                    if (room.rematchRequestedBy === oldSocketId) room.rematchRequestedBy = socket.id;
                     socket.join(room.id);
-
                     const opponent = room.players.find(p => p.userId !== userId);
-                    console.log(`[RECONNECT] Player ${userId} reconnected. Opponent: ${opponent.userId}`);
-
-                    // Enviar datos de reconexión con timer sincronizado
-                    socket.emit('reconnectSuccess', {
-                        roomState: room,
-                        state: room.state,
-                        currentRound: room.round,
-                        myScore: player.score,
-                        opScore: opponent.score,
-                        opponentId: opponent.userId,
-                        opponentImageUrl: opponent.imageUrl || null,
-                        isOpponentDisconnected: !!opponent.disconnected,
-                        turnTimer: room.turnTimer || 5 // Enviar el timer actual del servidor
-                    });
-
-                    // Notificar al oponente
-                    console.log(`[RECONNECT] Sending opponent reconnected event to ${opponent.socketId}`);
-                    io.to(opponent.socketId).emit('opponentReconnected', {
-                        opponentImageUrl: player.imageUrl,
-                        opponentId: player.userId
-                    });
-
-                    // RESUME GAME - Mejorado para manejar todos los estados
+                    socket.emit('reconnectSuccess', { roomState: room, state: room.state, currentRound: room.round, myScore: player.score, opScore: opponent.score, opponentId: opponent.userId, opponentImageUrl: opponent.imageUrl || null, isOpponentDisconnected: !!opponent.disconnected, turnTimer: room.turnTimer || 5 });
+                    io.to(opponent.socketId).emit('opponentReconnected', { opponentImageUrl: player.imageUrl, opponentId: player.userId });
                     setTimeout(() => {
-                        if (room.state === 'playing') {
-                            // Si estaba jugando, reiniciar el round actual
-                            room.players.forEach(p => p.choice = null);
-                            startRound(room);
-                        } else if (room.state === 'countdown') {
-                            startCountdown(room.id);
-                        } else if (room.state === 'roundResult') {
-                            // CRÍTICO: Si está en roundResult, recrear el timeout que avanza al siguiente round
-                            console.log('[RECONNECT] Recreating nextStepTimeout for roundResult state');
+                        if (room.state === 'playing') { room.players.forEach(p => p.choice = null); startRound(room); }
+                        else if (room.state === 'countdown') startCountdown(room.id);
+                        else if (room.state === 'roundResult') {
                             const [p1, p2] = room.players;
-                            if (p1.score >= 3 || p2.score >= 3) {
-                                room.nextStepTimeout = setTimeout(() => endGame(room), 2000);
-                            } else {
-                                room.round++;
-                                room.nextStepTimeout = setTimeout(() => startCountdown(room.id), 2000);
-                            }
+                            if (p1.score >= 3 || p2.score >= 3) room.nextStepTimeout = setTimeout(() => endGame(room), 2000);
+                            else { room.round++; room.nextStepTimeout = setTimeout(() => startCountdown(room.id), 2000); }
                         }
-                    }, 1000); // Delay para asegurar que el cliente procese reconnectSuccess
+                    }, 1000);
                     return;
                 }
             }
-            console.log(`[RECONNECT] No active room found for ${userId}`);
         });
 
         socket.on('getPlayerStats', async (targetUserId) => {
             try {
                 const { data: profile } = await supabase.from('profiles').select('id, username, rank_name, total_wins, total_games').eq('id', targetUserId).single();
                 const { data: stats } = await supabase.from('player_stats').select('*').eq('user_id', targetUserId).single();
-                socket.emit('playerStatsData', {
-                    ...profile,
-                    ranked_stats: stats ? { matches: stats.matches_played, wins: stats.wins, rock: stats.rock_count, paper: stats.paper_count, scissors: stats.scissors_count, openings: { rock: stats.opening_rock, paper: stats.opening_paper, scissors: stats.opening_scissors } } : null
-                });
+                socket.emit('playerStatsData', { ...profile, ranked_stats: stats ? { matches: stats.matches_played, wins: stats.wins, rock: stats.rock_count, paper: stats.paper_count, scissors: stats.scissors_count, openings: { rock: stats.opening_rock, paper: stats.opening_paper, scissors: stats.opening_scissors } } : null });
             } catch (err) { }
         });
     });
@@ -430,22 +432,15 @@ app.prepare().then(() => {
     function startCountdown(roomId) {
         const room = findRoomById(roomId);
         if (!room) return;
-
-        // SANITIZE: Clear existing interval
-        if (room.countdownInterval) {
-            clearInterval(room.countdownInterval);
-            room.countdownInterval = null;
-        }
-
+        if (room.countdownInterval) { clearInterval(room.countdownInterval); room.countdownInterval = null; }
         room.state = 'countdown';
         room.countdown = 3;
-
         room.countdownInterval = setInterval(() => {
             io.to(room.id).emit('countdown', room.countdown);
             if (room.countdown === 0) {
                 clearInterval(room.countdownInterval);
                 room.countdownInterval = null;
-                room.nextStepTimeout = setTimeout(() => startRound(room), 100); // Small delay to sync
+                room.nextStepTimeout = setTimeout(() => startRound(room), 100);
             }
             room.countdown--;
         }, 1000);
@@ -488,109 +483,42 @@ app.prepare().then(() => {
     }
 
     async function refundAndEndGame(room) {
-        if (room.players.some(p => p.disconnected)) return; // BLOCK: Forfeit win takes priority
         room.state = 'gameOver';
-
-        // CLEAR ALL INTERVALS/TIMEOUTS
-        if (room.reconnectInterval) {
-            clearInterval(room.reconnectInterval);
-            room.reconnectInterval = null;
-        }
-        if (room.countdownInterval) {
-            clearInterval(room.countdownInterval);
-            room.countdownInterval = null;
-        }
-        if (room.turnTimerInterval) clearInterval(room.turnTimerInterval);
-        if (room.nextStepTimeout) {
-            clearTimeout(room.nextStepTimeout);
-            room.nextStepTimeout = null;
-        }
+        if (room.reconnectInterval) { clearInterval(room.reconnectInterval); room.reconnectInterval = null; }
+        if (room.countdownInterval) { clearInterval(room.countdownInterval); room.countdownInterval = null; }
+        if (room.turnTimerInterval) { clearInterval(room.turnTimerInterval); room.turnTimerInterval = null; }
+        if (room.nextStepTimeout) { clearTimeout(room.nextStepTimeout); room.nextStepTimeout = null; }
 
         const currency = room.mode === 'casual' ? 'coins' : 'gems';
         const [p1, p2] = room.players;
 
-        // Reembolsar a ambos jugadores
-        const refunds = await Promise.all(
-            room.players.map(async (player) => {
-                const { data: p } = await supabase.from('profiles').select(currency).eq('id', player.userId).single();
-                if (p) {
-                    const { error } = await supabase.from('profiles').update({ [currency]: (p[currency] || 0) + room.stakeTier }).eq('id', player.userId);
-                    if (error) {
-                        console.error(`[SERVER_ECONOMY] Refund failed for ${player.userId}:`, error.message);
-                        return { success: false, userId: player.userId };
-                    }
-                    return { success: true, userId: player.userId };
-                }
-                return { success: false, userId: player.userId };
-            })
-        );
+        await Promise.all(room.players.map(async (player) => {
+            const { data: p } = await supabase.from('profiles').select(currency).eq('id', player.userId).single();
+            if (p) await supabase.from('profiles').update({ [currency]: (p[currency] || 0) + room.stakeTier }).eq('id', player.userId);
+        }));
 
-        // Obtener datos finales de ambos jugadores
         const getFinalData = async (player) => {
             const { data: profile } = await supabase.from('profiles').select('coins, gems').eq('id', player.userId).single();
-            return {
-                newCoins: profile?.coins || 0,
-                newGems: profile?.gems || 0,
-                prize: 0, // No hay premio en empate por inactividad
-                rpChange: 0,
-                newRp: profile?.rp || 0,
-                newRank: profile?.rank_name || 'BRONCE'
-            };
+            return { newCoins: profile?.coins || 0, newGems: profile?.gems || 0, prize: 0, rpChange: 0, newRp: profile?.rp || 0, newRank: profile?.rank_name || 'BRONCE' };
         };
 
         const [p1Final, p2Final] = await Promise.all([getFinalData(p1), getFinalData(p2)]);
-
-        // Emitir gameOver con empate para mostrar el modal correcto - MISMO EVENTO PARA AMBOS
-        const gameOverData = {
-            winner: 'tie', // Empate por inactividad
-            finalScore: {
-                player: p1.score,
-                opponent: p2.score
-            },
-            mode: room.mode,
-            stake: room.stakeTier,
-            inactivityRefund: true, // Flag para indicar que fue reembolso por inactividad
-            prize: 0,
-            rpChange: 0
-        };
-
-        // Enviar el MISMO evento a ambos jugadores con sus datos finales respectivos
         room.players.forEach(p => {
             if (!p.disconnected) {
                 const res = p.userId === p1.userId ? p1Final : p2Final;
-                // Ajustar finalScore para que cada jugador vea su score como "player"
-                const adjustedScore = p.userId === p1.userId
-                    ? { player: p1.score, opponent: p2.score }
-                    : { player: p2.score, opponent: p1.score };
-
-                io.to(p.socketId).emit('gameOver', {
-                    ...gameOverData,
-                    finalScore: adjustedScore,
-                    ...res
-                });
+                const adjustedScore = p.userId === p1.userId ? { player: p1.score, opponent: p2.score } : { player: p2.score, opponent: p1.score };
+                io.to(p.socketId).emit('gameOver', { winner: 'tie', finalScore: adjustedScore, mode: room.mode, stake: room.stakeTier, inactivityRefund: true, prize: 0, rpChange: 0, ...res });
             }
         });
 
-        // Registrar el match como empate
-        await recordMatch({
-            player1_id: p1.userId,
-            player2_id: p2.userId,
-            winner_id: null, // Empate
-            p1_score: p1.score,
-            p2_score: p2.score,
-            mode: room.mode,
-            stake: room.stakeTier,
-            created_at: new Date().toISOString()
-        });
-
+        await recordMatch({ player1_id: p1.userId, player2_id: p2.userId, winner_id: null, p1_score: p1.score, p2_score: p2.score, mode: room.mode, stake: room.stakeTier, created_at: new Date().toISOString() });
         room.cleanupTimer = setTimeout(() => room.players.forEach(p => { if (activeRooms.get(p.socketId) === room) activeRooms.delete(p.socketId); }), 15000);
     }
 
     async function resolveRound(room) {
-        if (room.players.some(p => p.disconnected)) return; // Don't resolve if someone left
+        if (room.players.some(p => p.disconnected)) return;
         if (room.turnTimerInterval) { clearInterval(room.turnTimerInterval); room.turnTimerInterval = null; }
         const [p1, p2] = room.players;
-        if (p1.choice && p2.choice && room.turnTimer > 0) room.inactivityTies = 0;
         const result = determineWinner(p1.choice, p2.choice);
         if (result === 'player1') p1.score++; else if (result === 'player2') p2.score++;
         if (room.stats && p1.choice && p2.choice) {
@@ -602,36 +530,17 @@ app.prepare().then(() => {
             const opp = room.players[idx === 0 ? 1 : 0];
             io.to(p.socketId).emit('roundResult', { winner: result === 'tie' ? 'tie' : (result === `player${idx + 1}` ? 'player' : 'opponent'), playerChoice: p.choice, opponentChoice: opp.choice, playerScore: p.score, opponentScore: opp.score, round: room.round });
         });
-        if (p1.score >= 3 || p2.score >= 3) {
-            room.nextStepTimeout = setTimeout(() => endGame(room), 2000); // Reducido de 3s a 2s
-        } else {
-            room.round++;
-            room.nextStepTimeout = setTimeout(() => startCountdown(room.id), 2000); // Reducido de 4s a 2s
-        }
+        if (p1.score >= 3 || p2.score >= 3) room.nextStepTimeout = setTimeout(() => endGame(room), 2000);
+        else { room.round++; room.nextStepTimeout = setTimeout(() => startCountdown(room.id), 2000); }
     }
 
     async function endGame(room, forcedWinnerId = null) {
         if (room.state === 'gameOver') return;
         room.state = 'gameOver';
-
-        // CLEAR ALL INTERVALS/TIMEOUTS
-        if (room.reconnectInterval) {
-            clearInterval(room.reconnectInterval);
-            room.reconnectInterval = null;
-        }
-        if (room.countdownInterval) {
-            clearInterval(room.countdownInterval);
-            room.countdownInterval = null;
-        }
-        if (room.turnTimerInterval) {
-            clearInterval(room.turnTimerInterval);
-            room.turnTimerInterval = null;
-        }
-        if (room.nextStepTimeout) {
-            clearTimeout(room.nextStepTimeout);
-            room.nextStepTimeout = null;
-        }
-
+        if (room.reconnectInterval) { clearInterval(room.reconnectInterval); room.reconnectInterval = null; }
+        if (room.countdownInterval) { clearInterval(room.countdownInterval); room.countdownInterval = null; }
+        if (room.turnTimerInterval) { clearInterval(room.turnTimerInterval); room.turnTimerInterval = null; }
+        if (room.nextStepTimeout) { clearTimeout(room.nextStepTimeout); room.nextStepTimeout = null; }
         room.players.forEach(p => { if (p.reconnectTimeout) clearTimeout(p.reconnectTimeout); });
 
         const [p1, p2] = room.players;
@@ -643,7 +552,6 @@ app.prepare().then(() => {
             if (!profile) return {};
             let updates = { total_wins: isWinner ? (profile.total_wins || 0) + 1 : (profile.total_wins || 0), total_games: (profile.total_games || 0) + 1 };
             let resultData = { rpChange: 0, newRp: profile.rp, newRank: profile.rank_name, prize: 0 };
-
             if (room.mode === 'ranked') {
                 const multiplier = room.stakeTier >= 1000 ? 10 : (room.stakeTier >= 500 ? 5 : (room.stakeTier >= 100 ? 2 : 1));
                 const rpChange = isWinner ? (20 * multiplier) : -(15 * multiplier);
@@ -655,29 +563,22 @@ app.prepare().then(() => {
                 updates.coins = (profile.coins || 0) + room.stakeTier * 2;
                 resultData.prize = room.stakeTier * 2;
             }
-
             const session = room.stats[player.userId];
-            if (session) {
-                await incrementPlayerStats({ t_user_id: player.userId, t_is_win: isWinner ? 1 : 0, t_rock: session.rock, t_paper: session.paper, t_scissors: session.scissors, t_o_rock: session.openings.rock, t_o_paper: session.openings.paper, t_o_scissors: session.openings.scissors },
-                    { user_id: player.userId, wins: isWinner ? 1 : 0, rock_count: session.rock, paper_count: session.paper, scissors_count: session.scissors, opening_rock: session.openings.rock, opening_paper: session.openings.paper, opening_scissors: session.openings.scissors });
-            }
+            if (session) await incrementPlayerStats({ t_user_id: player.userId, t_is_win: isWinner ? 1 : 0, t_rock: session.rock, t_paper: session.paper, t_scissors: session.scissors, t_o_rock: session.openings.rock, t_o_paper: session.openings.paper, t_o_scissors: session.openings.scissors }, { user_id: player.userId, wins: isWinner ? 1 : 0, rock_count: session.rock, paper_count: session.paper, scissors_count: session.scissors, opening_rock: session.openings.rock, opening_paper: session.openings.paper, opening_scissors: session.openings.scissors });
             await supabase.from('profiles').update(updates).eq('id', player.userId);
             const { data: final } = await supabase.from('profiles').select('coins, gems').eq('id', player.userId).single();
             return { ...resultData, newCoins: final.coins, newGems: final.gems };
         };
 
         const [p1Res, p2Res] = await Promise.all([updateData(p1, winnerId === p1.userId), updateData(p2, winnerId === p2.userId)]);
-
         await recordMatch({ player1_id: p1.userId, player2_id: p2.userId, winner_id: winnerId === 'tie' ? null : winnerId, p1_score: p1.score, p2_score: p2.score, mode: room.mode, stake: room.stakeTier, created_at: new Date().toISOString() });
-
         room.players.forEach(p => {
             if (!p.disconnected) {
                 const res = p.userId === p1.userId ? p1Res : p2Res;
-                io.to(p.socketId).emit('gameOver', { winner: p.userId === winnerId ? 'player' : (winnerId === 'tie' ? 'tie' : 'opponent'), finalScore: { player: p.score, opponent: room.players.find(op => op.userId !== p.userId).score }, ...res, mode: room.mode, stake: room.stakeTier });
+                io.to(p.socketId).emit('gameOver', { winner: p.userId === winnerId ? 'player' : (winnerId === 'tie' ? 'tie' : 'opponent'), finalScore: { player: p.score, opponent: (room.players.find(op => op.userId !== p.userId) || { score: 0 }).score }, ...res, mode: room.mode, stake: room.stakeTier });
             }
         });
-
-        room.cleanupTimer = setTimeout(() => room.players.forEach(p => { if (activeRooms.get(p.socketId) === room) activeRooms.delete(p.socketId); }), 15000); // Store timeout ref
+        room.cleanupTimer = setTimeout(() => room.players.forEach(p => { if (activeRooms.get(p.socketId) === room) activeRooms.delete(p.socketId); }), 15000);
     }
 
     httpServer.once('error', (err) => { console.error(err); process.exit(1); }).listen(port, () => { console.log(`> Ready on http://${hostname}:${port}`); });
