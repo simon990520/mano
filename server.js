@@ -65,16 +65,18 @@ app.prepare().then(() => {
         socket.on('updateProfile', async (data) => {
             const { username, birthDate } = data;
             try {
-                // Determine if it's a new or existing profile
+                // Determine if it's a new or existing profile by checking for username
                 const { data: existing, error: fetchError } = await supabase
                     .from('profiles')
-                    .select('coins, gems')
+                    .select('coins, gems, username')
                     .eq('id', userId)
                     .maybeSingle();
 
-                const isNew = !existing;
-                const startingCoins = isNew ? 30 : (existing.coins || 0);
-                const startingGems = isNew ? 0 : (existing.gems || 0);
+                // If profile doesn't exist OR hasn't set a username yet, it's a "Welcome" case
+                const isFirstTimeOnboarding = !existing || !existing.username;
+
+                const startingCoins = isFirstTimeOnboarding ? 30 : (existing.coins || 0);
+                const startingGems = isFirstTimeOnboarding ? 0 : (existing.gems || 0);
 
                 const { error } = await supabase
                     .from('profiles')
@@ -91,7 +93,7 @@ app.prepare().then(() => {
                     console.error('[SERVER_DB] Profile update error:', error.message);
                     socket.emit('profileUpdateError', error.message);
                 } else {
-                    console.log(`[SERVER_DB] Profile for ${userId} updated. New: ${isNew}, Coins: ${startingCoins}`);
+                    console.log(`[BONUS_LOG] User ${userId} onboarding. FirstTime: ${isFirstTimeOnboarding}, Granting: ${startingCoins} coins`);
                     socket.emit('profileUpdated', { coins: startingCoins, gems: startingGems });
                 }
             } catch (err) {
