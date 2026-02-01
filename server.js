@@ -68,13 +68,13 @@ app.prepare().then(() => {
                 // Fetch existing profile to check columns
                 const { data: existing } = await supabase
                     .from('profiles')
-                    .select('username, coins, gems')
+                    .select('username, birth_date, coins, gems')
                     .eq('id', userId)
                     .maybeSingle();
 
-                // WELCOME BONUS: Only if they don't have a username yet
-                const isNewOnboarding = !existing || !existing.username || existing.username.trim() === '';
-                console.log(`[BONUS_LOG] Checking bonus for ${userId}. Existing username: "${existing?.username || ''}", isNew: ${isNewOnboarding}`);
+                // WELCOME BONUS: Triggered if they haven't set their birth_date yet (our onboarding completion metric)
+                const isNewOnboarding = !existing || !existing.birth_date;
+                console.log(`[BONUS_LOG] Checking bonus for ${userId}. Has BirthDate: ${!!existing?.birth_date}, isNew: ${isNewOnboarding}`);
 
                 let finalCoins = (existing?.coins || 0);
                 let finalGems = (existing?.gems || 0);
