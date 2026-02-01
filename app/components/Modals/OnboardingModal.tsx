@@ -18,20 +18,20 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     return (
         <div className="modal-overlay" style={{ zIndex: 30000 }}>
             <div className="modal-content">
-                <h2 className="modal-title">WELCOME PLAYER</h2>
+                <h2 className="modal-title">¡BIENVENIDO!</h2>
                 <div className="input-group">
-                    <label className="input-label">Choose your fighter name</label>
+                    <label className="input-label">Elige tu nombre de luchador</label>
                     <input
                         type="text"
                         className="modal-input"
-                        placeholder="Username"
+                        placeholder="Nombre de usuario"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         maxLength={15}
                     />
                 </div>
                 <div className="input-group">
-                    <label className="input-label">Date of Birth</label>
+                    <label className="input-label">Fecha de Nacimiento</label>
                     <input
                         type="date"
                         className="modal-input"
@@ -40,7 +40,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                     />
                 </div>
                 <button className="btn-enter-arena" onClick={onSave}>
-                    ENTER ARENA
+                    ENTRAR A LA ARENA
                 </button>
             </div>
         </div>

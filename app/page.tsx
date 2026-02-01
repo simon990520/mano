@@ -8,6 +8,8 @@ import { useEconomyController } from '@/app/controllers/useEconomyController';
 import { useGameController } from '@/app/controllers/useGameController';
 import { supabase } from '@/app/services/supabase';
 
+import { WelcomeBonusModal } from '@/app/components/Modals/WelcomeBonusModal';
+
 // Components
 import { Header } from '@/app/components/layout/Header';
 import { LobbyScreen } from '@/app/components/Lobby/LobbyScreen';
@@ -332,19 +334,75 @@ export default function Home() {
                     onSave={economyActions.handleSaveProfile}
                 />
             )}
+
+            {economyState.showWelcomeBonus && (
+                <WelcomeBonusModal onClaim={economyActions.handleClaimWelcomeBonus} />
+            )}
         </>
     );
 }
 
-// Temporary Wrapper for Leaderboard logic
+// Functional Leaderboard Wrapper
 function LeaderboardWrapper({ onClose, onShowStats }: { onClose: () => void, onShowStats: (id: string) => void }) {
     const [data, setData] = useState<any[]>([]);
     const [filter, setFilter] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
 
     useEffect(() => {
         const fetchLeaderboard = async () => {
-            const { data: lb } = await supabase.from('profiles').select('*').order('total_wins', { ascending: false }).limit(10);
-            if (lb) setData(lb);
+            try {
+                // Get time bounds
+                const now = new Date();
+                let since = new Date();
+                if (filter === 'daily') since.setDate(now.getDate() - 1);
+                else if (filter === 'weekly') since.setDate(now.getDate() - 7);
+                else since.setMonth(now.getMonth() - 1);
+
+                const sinceIso = since.toISOString();
+
+                // 1. Get matches in the timeframe
+                const { data: matches, error: matchesError } = await supabase
+                    .from('matches')
+                    .select('winner_id')
+                    .not('winner_id', 'is', null)
+                    .gte('created_at', sinceIso);
+
+                if (matchesError) throw matchesError;
+
+                // 2. Count wins per player
+                const winCounts: { [key: string]: number } = {};
+                matches.forEach(m => {
+                    winCounts[m.winner_id] = (winCounts[m.winner_id] || 0) + 1;
+                });
+
+                // 3. Get profiles of the winners
+                const winnerIds = Object.keys(winCounts);
+                if (winnerIds.length === 0) {
+                    // Fallback to total wins if no recent matches
+                    const { data: allTime } = await supabase.from('profiles').select('*').order('total_wins', { ascending: false }).limit(10);
+                    setData(allTime || []);
+                    return;
+                }
+
+                const { data: profiles, error: profilesError } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .in('id', winnerIds);
+
+                if (profilesError) throw profilesError;
+
+                // 4. Combine and sort
+                const combined = profiles.map(p => ({
+                    ...p,
+                    total_wins: winCounts[p.id] // Override with filtered wins for display
+                })).sort((a, b) => b.total_wins - a.total_wins).slice(0, 10);
+
+                setData(combined);
+            } catch (err) {
+                console.error('[LEADERBOARD] Fetch error:', err);
+                // Last ditch fallback
+                const { data: fallback } = await supabase.from('profiles').select('*').order('total_wins', { ascending: false }).limit(10);
+                setData(fallback || []);
+            }
         };
         fetchLeaderboard();
     }, [filter]);

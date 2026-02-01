@@ -22,6 +22,8 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
     const [currentStreak, setCurrentStreak] = useState<number>(0);
     const [lastClaimedAt, setLastClaimedAt] = useState<string | null>(null);
 
+    const [showWelcomeBonus, setShowWelcomeBonus] = useState<boolean>(false);
+
     // Global Error/Success States (Economy/General)
     const [errorModal, setErrorModal] = useState<{ isOpen: boolean, title: string, message: string }>({
         isOpen: false,
@@ -91,12 +93,8 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
                 zIndex: 30000
             });
 
-            // RACHA SUCCESS MODAL
-            setSuccessModal({
-                isOpen: true,
-                title: '¡RECOMPENSA!',
-                message: `Has reclamado ${streak * 10} monedas. ¡Vuelve mañana para el día ${streak === 7 ? 1 : streak + 1}! 🚀`
-            });
+            // CLOSE SHOP AUTOMATICALLY
+            setShowCoinShop(false);
 
             console.log(`[ECONOMY] Daily reward claimed! Streak: ${streak}, New Coins: ${newCoins}`);
 
@@ -130,6 +128,11 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
                 colors: ['#00ff88', '#60efff', '#ffffff'],
                 zIndex: 30000
             });
+
+            // SHOW WELCOME BONUS AFTER ONBOARDING
+            setTimeout(() => {
+                setShowWelcomeBonus(true);
+            }, 500);
         };
 
         const onProfileUpdateError = (msg: string) => {
@@ -237,6 +240,23 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
         }
     };
 
+    const handleClaimWelcomeBonus = () => {
+        if (socket) {
+            socket.emit('claimWelcomeBonus');
+            setShowWelcomeBonus(false);
+            playSound('/sounds/sfx/win_round.mp3');
+
+            // REWARD CONFETTI
+            confetti({
+                particleCount: 200,
+                spread: 100,
+                origin: { y: 0.6 },
+                colors: ['#ffd700', '#ffffff', '#00ff88'],
+                zIndex: 40000
+            });
+        }
+    };
+
     // Helper to update economy from Game Over data
     const handleGameOverUpdate = (data: GameOverData) => {
         if (data.newRp !== undefined) setRp(data.newRp);
@@ -259,7 +279,8 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             currentStreak,
             lastClaimedAt,
             errorModal,
-            successModal
+            successModal,
+            showWelcomeBonus
         },
         economyActions: {
             setCoins,
@@ -276,6 +297,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             handleSaveProfile,
             checkProfile,
             handleGameOverUpdate,
+            handleClaimWelcomeBonus,
             closeError: () => setErrorModal(prev => ({ ...prev, isOpen: false })),
             closeSuccess: () => setSuccessModal(prev => ({ ...prev, isOpen: false }))
         }
