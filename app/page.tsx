@@ -165,6 +165,8 @@ export default function Home() {
                     type="coins"
                     onClose={() => economyActions.setShowCoinShop(false)}
                     onPurchase={economyActions.handlePurchase}
+                    currentStreak={economyState.currentStreak}
+                    lastClaimedAt={economyState.lastClaimedAt}
                 />
             )}
 

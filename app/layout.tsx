@@ -22,6 +22,7 @@ export default function RootLayout({
                 <body suppressHydrationWarning>
                     {children}
                     <GoogleAdsense />
+                    <script src="https://checkout.bold.co/library/boldPaymentButton.js"></script>
                 </body>
             </html>
         </ClerkProvider>

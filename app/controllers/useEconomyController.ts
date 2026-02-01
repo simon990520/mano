@@ -18,6 +18,9 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
     const [showCoinShop, setShowCoinShop] = useState<boolean>(false);
     const [showGemShop, setShowGemShop] = useState<boolean>(false);
 
+    const [currentStreak, setCurrentStreak] = useState<number>(0);
+    const [lastClaimedAt, setLastClaimedAt] = useState<string | null>(null);
+
     const checkProfile = async () => {
         if (!isSignedIn || !user) return;
         const { data, error } = await supabase
@@ -37,6 +40,8 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             setGems(data.gems || 0);
             setRp(data.rp || 0);
             setRankName(data.rank_name || 'BRONCE');
+            setCurrentStreak(data.current_streak || 0);
+            setLastClaimedAt(data.last_claimed_at || null);
         }
     };
 
@@ -55,9 +60,17 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             console.log(`[ECONOMY] Purchase confirmed by server: ${type} = ${newValue}`);
         };
 
+        const onRewardClaimed = ({ newCoins, streak, claimedAt }: { newCoins: number, streak: number, claimedAt: string }) => {
+            setCoins(newCoins);
+            setCurrentStreak(streak);
+            setLastClaimedAt(claimedAt);
+            playSound('/sounds/sfx/win_round.mp3');
+            console.log(`[ECONOMY] Daily reward claimed! Streak: ${streak}, New Coins: ${newCoins}`);
+        };
+
         const onPurchaseError = (error: string) => {
             console.error('[ECONOMY] Server purchase error:', error);
-            alert(`Error en la compra: ${error}. Por favor, verifica tu conexión o base de datos.`);
+            alert(`Error en la operación: ${error}.`);
         };
 
         const onProfileUpdated = () => {
@@ -74,6 +87,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
         };
 
         socket.on('purchaseSuccess', onPurchaseSuccess);
+        socket.on('rewardClaimed', onRewardClaimed);
         socket.on('purchaseError', onPurchaseError);
         socket.on('profileUpdated', onProfileUpdated);
         socket.on('profileUpdateError', onProfileUpdateError);
@@ -81,6 +95,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
 
         return () => {
             socket.off('purchaseSuccess', onPurchaseSuccess);
+            socket.off('rewardClaimed', onRewardClaimed);
             socket.off('purchaseError', onPurchaseError);
             socket.off('profileUpdated', onProfileUpdated);
             socket.off('profileUpdateError', onProfileUpdateError);
@@ -89,7 +104,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
     }, [socket]);
 
 
-    const handlePurchase = (type: 'coins' | 'gems', amount: number) => {
+    const handlePurchase = async (type: 'coins' | 'gems', amount: number) => {
         console.log(`[ECONOMY] handlePurchase triggered: ${type}, amount: ${amount}`);
 
         if (!isSignedIn || !user || !socket) {
@@ -97,69 +112,43 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             return;
         }
 
-        // ADMOB REWARD INTERCEPTION
+        // DAILY STREAK CLAIM (Replaces Ads/WhatsApp for 10 coins)
         if (type === 'coins' && amount === 10) {
-            console.log('[ECONOMY] Intercepting for AdMob reward...');
-            playSound('/sounds/sfx/click.mp3');
+            handleClaimDaily();
+            return;
+        }
 
-            const anyWindow = window as any;
+        // MANUAL WHATSAPP INTEGRATION
+        const prices: { [key: number]: number } = {
+            50: 5000,
+            100: 10000,
+            250: 25000,
+            500: 50000,
+            1000: type === 'coins' ? 100000 : 1000000
+        };
 
-            // CHECK LOAD STATUS FIRST
-            if (anyWindow.admobStatus === 'error') {
-                console.error('[ADMOB] Fast-fail: SDK failed to load.');
-                alert('NO SE PUDO CARGAR EL ANUNCIO.\n\nCausa probable: Bloqueador de Anuncios activo (AdBlock, Brave Shield, etc).\n\nSolución: Desactiva el bloqueador para este sitio y recarga la página.');
-                return;
-            }
-
-            if (typeof anyWindow.adBreak === 'function') {
-                console.log('[ADMOB] window.adBreak found. Triggering adBreak call...');
-
-                // Fail-safe timeout (5 seconds)
-                const adBreakTimeout = setTimeout(() => {
-                    console.error('[ADMOB] TIMEOUT: adBreak called but no response within 5s');
-                    alert('El anuncio no responde. Revisa si tienes un bloqueador de anuncios activo.');
-                }, 5000);
-
-                try {
-                    anyWindow.adBreak({
-                        type: 'reward',
-                        name: 'get_10_coins_reward',
-                        beforeReward: (showAdFn: () => void) => {
-                            clearTimeout(adBreakTimeout);
-                            console.log('[ADMOB] beforeReward callback triggered. Showing ad...');
-                            showAdFn();
-                        },
-                        adViewed: () => {
-                            clearTimeout(adBreakTimeout);
-                            console.log('[ADMOB] adViewed callback triggered. Success!');
-                            socket.emit('purchase', { type: 'coins', amount: 10 });
-                            playSound('/sounds/sfx/win_round.mp3');
-                        },
-                        adDismissed: () => {
-                            clearTimeout(adBreakTimeout);
-                            console.warn('[ADMOB] adDismissed callback triggered. No reward.');
-                        },
-                        adError: (err: any) => {
-                            clearTimeout(adBreakTimeout);
-                            console.error('[ADMOB] adError callback triggered:', err);
-                            alert('No hay anuncios disponibles en este momento.');
-                        }
-                    });
-                } catch (err) {
-                    clearTimeout(adBreakTimeout);
-                    console.error('[ADMOB] EXCEPTION calling adBreak:', err);
-                    alert('Error técnico al iniciar el anuncio.');
-                }
-            } else {
-                console.error('[ADMOB] ERROR: window.adBreak is NOT a function or is undefined.');
-                alert('El sistema de anuncios (AdMob) no se ha cargado correctamente. Desactiva bloqueadores de publicidad.');
-            }
+        const price = prices[amount];
+        if (!price) {
+            console.error('Invalid amount selected');
             return;
         }
 
         playSound('/sounds/sfx/click.mp3');
-        console.log(`[ECONOMY] Normal purchase flow emitting: ${type} +${amount}`);
-        socket.emit('purchase', { type, amount });
+
+        // WHATSAPP REDIRECTION
+        const phoneNumber = '573506049629';
+        const itemType = type === 'coins' ? 'monedas' : 'gemas';
+        const message = `Hola buenos dias deseo comprar ${amount} ${itemType}`;
+        const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+
+        window.open(whatsappUrl, '_blank');
+    };
+
+    const handleClaimDaily = () => {
+        if (socket) {
+            socket.emit('claimDailyReward');
+            playSound('/sounds/sfx/click.mp3');
+        }
     };
 
     const handleSaveProfile = () => {
@@ -190,7 +179,9 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             showGemShop,
             showOnboarding,
             username,
-            birthDate
+            birthDate,
+            currentStreak,
+            lastClaimedAt
         },
         economyActions: {
             setCoins,
@@ -203,6 +194,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             setUsername,
             setBirthDate,
             handlePurchase,
+            handleClaimDaily,
             handleSaveProfile,
             checkProfile,
             handleGameOverUpdate
