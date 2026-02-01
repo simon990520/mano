@@ -582,11 +582,18 @@ app.prepare().then(() => {
                 const rpChange = isWinner ? (20 * multiplier) : -(15 * multiplier);
                 updates.rp = Math.max(0, (profile.rp || 0) + rpChange);
                 updates.rank_name = getRankByRp(updates.rp);
-                if (isWinner) { updates.gems = (profile.gems || 0) + room.stakeTier * 2; resultData.prize = room.stakeTier * 2; }
+                if (isWinner) {
+                    const prize = Math.floor(room.stakeTier * 1.8); // 10% Rake (90% of pot)
+                    updates.gems = (profile.gems || 0) + prize;
+                    resultData.prize = prize;
+                    console.log(`[RAKE] Ranked Match: User ${player.userId} won ${prize} gems (10% rake applied)`);
+                }
                 resultData = { ...resultData, rpChange, newRp: updates.rp, newRank: updates.rank_name };
             } else if (isWinner) {
-                updates.coins = (profile.coins || 0) + room.stakeTier * 2;
-                resultData.prize = room.stakeTier * 2;
+                const prize = Math.floor(room.stakeTier * 1.8); // 10% Rake (90% of pot)
+                updates.coins = (profile.coins || 0) + prize;
+                resultData.prize = prize;
+                console.log(`[RAKE] Casual Match: User ${player.userId} won ${prize} coins (10% rake applied)`);
             }
             const session = room.stats[player.userId];
             if (session) await incrementPlayerStats({ t_user_id: player.userId, t_is_win: isWinner ? 1 : 0, t_rock: session.rock, t_paper: session.paper, t_scissors: session.scissors, t_o_rock: session.openings.rock, t_o_paper: session.openings.paper, t_o_scissors: session.openings.scissors }, { user_id: player.userId, wins: isWinner ? 1 : 0, rock_count: session.rock, paper_count: session.paper, scissors_count: session.scissors, opening_rock: session.openings.rock, opening_paper: session.openings.paper, opening_scissors: session.openings.scissors });
