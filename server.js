@@ -65,27 +65,32 @@ app.prepare().then(() => {
         socket.on('updateProfile', async (data) => {
             const { username, birthDate } = data;
             try {
-                // Determine if it's a new or existing profile by checking for username
-                const { data: existing, error: fetchError } = await supabase
+                // Fetch existing profile to check columns
+                const { data: existing } = await supabase
                     .from('profiles')
-                    .select('coins, gems, username')
+                    .select('username, coins, gems')
                     .eq('id', userId)
                     .maybeSingle();
 
-                // If profile doesn't exist OR hasn't set a username yet, it's a "Welcome" case
-                const isFirstTimeOnboarding = !existing || !existing.username;
+                // WELCOME BONUS: Only if they don't have a username yet
+                const isNewOnboarding = !existing || !existing.username;
 
-                const startingCoins = isFirstTimeOnboarding ? 30 : (existing.coins || 0);
-                const startingGems = isFirstTimeOnboarding ? 0 : (existing.gems || 0);
+                let finalCoins = (existing?.coins || 0);
+                let finalGems = (existing?.gems || 0);
+
+                if (isNewOnboarding) {
+                    finalCoins += 30; // ADD 30 coins as welcome bonus
+                    console.log(`[WELCOME_BONUS] User ${userId} is onboarding for the first time. Adding 30 coins.`);
+                }
 
                 const { error } = await supabase
                     .from('profiles')
                     .upsert({
                         id: userId,
-                        username,
+                        username: username,
                         birth_date: birthDate,
-                        coins: startingCoins,
-                        gems: startingGems,
+                        coins: finalCoins,
+                        gems: finalGems,
                         updated_at: new Date().toISOString()
                     });
 
@@ -93,8 +98,8 @@ app.prepare().then(() => {
                     console.error('[SERVER_DB] Profile update error:', error.message);
                     socket.emit('profileUpdateError', error.message);
                 } else {
-                    console.log(`[BONUS_LOG] User ${userId} onboarding. FirstTime: ${isFirstTimeOnboarding}, Granting: ${startingCoins} coins`);
-                    socket.emit('profileUpdated', { coins: startingCoins, gems: startingGems });
+                    console.log(`[SERVER_DB] Profile updated for ${userId}. Coins: ${finalCoins}, Gems: ${finalGems}`);
+                    socket.emit('profileUpdated', { coins: finalCoins, gems: finalGems });
                 }
             } catch (err) {
                 console.error('[SERVER_DB] Profile update exception:', err.message);
