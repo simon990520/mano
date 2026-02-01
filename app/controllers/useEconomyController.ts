@@ -66,6 +66,15 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             setLastClaimedAt(claimedAt);
             playSound('/sounds/sfx/win_round.mp3');
             console.log(`[ECONOMY] Daily reward claimed! Streak: ${streak}, New Coins: ${newCoins}`);
+
+            // GTM Analytics
+            if (typeof window !== 'undefined' && (window as any).dataLayer) {
+                (window as any).dataLayer.push({
+                    event: 'daily_reward_claim_success',
+                    streak: streak,
+                    rewardAmount: (streak + 1) * 10
+                });
+            }
         };
 
         const onPurchaseError = (error: string) => {
@@ -140,6 +149,15 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
         const itemType = type === 'coins' ? 'monedas' : 'gemas';
         const message = `Hola buenos dias deseo comprar ${amount} ${itemType}`;
         const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+
+        // GTM Analytics
+        if (typeof window !== 'undefined' && (window as any).dataLayer) {
+            (window as any).dataLayer.push({
+                event: 'purchase_attempt',
+                itemType: type,
+                amount: amount
+            });
+        }
 
         window.open(whatsappUrl, '_blank');
     };

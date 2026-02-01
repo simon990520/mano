@@ -146,10 +146,30 @@ export default function Home() {
             <Header
                 gems={economyState.gems}
                 coins={economyState.coins}
-                onOpenSettings={() => setShowSettings(true)}
-                onOpenGemShop={() => economyActions.setShowGemShop(true)}
-                onOpenCoinShop={() => economyActions.setShowCoinShop(true)}
-                onOpenLeaderboard={() => setShowLeaderboard(true)}
+                onOpenSettings={() => {
+                    setShowSettings(true);
+                    if (typeof window !== 'undefined' && (window as any).dataLayer) {
+                        (window as any).dataLayer.push({ event: 'settings_open' });
+                    }
+                }}
+                onOpenGemShop={() => {
+                    economyActions.setShowGemShop(true);
+                    if (typeof window !== 'undefined' && (window as any).dataLayer) {
+                        (window as any).dataLayer.push({ event: 'shop_open', shopType: 'gems' });
+                    }
+                }}
+                onOpenCoinShop={() => {
+                    economyActions.setShowCoinShop(true);
+                    if (typeof window !== 'undefined' && (window as any).dataLayer) {
+                        (window as any).dataLayer.push({ event: 'shop_open', shopType: 'coins' });
+                    }
+                }}
+                onOpenLeaderboard={() => {
+                    setShowLeaderboard(true);
+                    if (typeof window !== 'undefined' && (window as any).dataLayer) {
+                        (window as any).dataLayer.push({ event: 'leaderboard_open' });
+                    }
+                }}
             />
 
             {/* Modals */}

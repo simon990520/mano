@@ -118,6 +118,16 @@ export const useGameController = (
             } else {
                 setOpponentId(null);
             }
+
+            // GTM Analytics
+            if (typeof window !== 'undefined' && (window as any).dataLayer) {
+                (window as any).dataLayer.push({
+                    event: 'match_start',
+                    gameMode: data.mode || gameMode,
+                    stake: data.stakeTier || selectedStake,
+                    opponentId: data.opponentId || 'unknown'
+                });
+            }
         });
 
         socket.on('countdown', (count: number) => {
@@ -173,6 +183,17 @@ export const useGameController = (
                 else if (result.winner === 'opponent') playSound('/sounds/sfx/lose_round.mp3');
                 else playSound('/sounds/sfx/tie.mp3');
             }, 400);
+
+            // GTM Analytics
+            if (typeof window !== 'undefined' && (window as any).dataLayer) {
+                (window as any).dataLayer.push({
+                    event: 'round_end',
+                    roundNumber: round,
+                    winner: result.winner,
+                    playerChoice: result.playerChoice,
+                    opponentChoice: result.opponentChoice
+                });
+            }
         });
 
         socket.on('gameOver', (data: GameOverData & { inactivityRefund?: boolean }) => {
@@ -223,6 +244,17 @@ export const useGameController = (
                 else if (data.winner === 'opponent') playSound('/sounds/voices/announcer/lose_game.mp3');
                 else if (data.winner === 'tie') playSound('/sounds/sfx/tie.mp3');
             }, 500);
+
+            // GTM Analytics
+            if (typeof window !== 'undefined' && (window as any).dataLayer) {
+                (window as any).dataLayer.push({
+                    event: 'game_over',
+                    winner: data.winner,
+                    gameMode: data.mode,
+                    finalScore: `${playerScore}-${opponentScore}`,
+                    inactivityRefund: data.inactivityRefund || false
+                });
+            }
         });
 
         socket.on('rematchRequested', () => {
@@ -375,6 +407,15 @@ export const useGameController = (
             mode: gameMode,
             stakeTier: selectedStake
         });
+
+        // GTM Analytics
+        if (typeof window !== 'undefined' && (window as any).dataLayer) {
+            (window as any).dataLayer.push({
+                event: 'match_search_start',
+                gameMode: gameMode,
+                stake: selectedStake
+            });
+        }
     };
 
     const handleLeaveQueue = () => {
@@ -390,6 +431,15 @@ export const useGameController = (
             playSound('/sounds/sfx/click.mp3');
             playSound(`/sounds/voices/announcer/${choice}.mp3`);
             socket.emit('makeChoice', choice);
+
+            // GTM Analytics
+            if (typeof window !== 'undefined' && (window as any).dataLayer) {
+                (window as any).dataLayer.push({
+                    event: 'choice_made',
+                    choice: choice,
+                    round: round
+                });
+            }
         }
     };
 
