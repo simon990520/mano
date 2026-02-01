@@ -44,12 +44,12 @@ export const ShopModal: React.FC<ShopModalProps> = ({ type, onClose, onPurchase,
                     {amounts.map((amount) => {
                         const isDailyStreak = type === 'coins' && amount === 10;
                         const prices: { [key: number]: number } = {
-                            10: isDailyStreak ? 0 : 1000, // Fallback if 10 gems/coins used elsewhere
-                            50: 5000,
-                            100: 10000,
-                            250: 25000,
-                            500: 50000,
-                            1000: type === 'coins' ? 100000 : 1000000
+                            10: isDailyStreak ? 0 : (isCoins ? 100 : 1000),
+                            50: isCoins ? 500 : 5000,
+                            100: isCoins ? 1000 : 10000,
+                            250: isCoins ? 2500 : 25000,
+                            500: isCoins ? 5000 : 50000,
+                            1000: isCoins ? 10000 : 1000000
                         };
                         const price = prices[amount];
 
