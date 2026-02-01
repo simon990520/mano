@@ -7,3 +7,5 @@
     - [x] Add SQL schema update documentation <!-- id: 4 -->
 - [x] Cleanup legacy AdSense/Bold logic <!-- id: 5 -->
 - [x] Verify system functionality <!-- id: 6 -->
+- [x] Add confetti effect on reward claim <!-- id: 7 -->
+- [x] Replace generic alerts with premium ErrorModal <!-- id: 8 -->

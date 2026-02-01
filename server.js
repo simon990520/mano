@@ -94,13 +94,19 @@ app.prepare().then(() => {
                     .eq('id', userId)
                     .single();
 
+                let profileData = profile;
+
                 if (fetchError || !profile) {
-                    socket.emit('purchaseError', 'User profile not found');
-                    return;
+                    // NEW USER case: Create a default profile structure
+                    profileData = {
+                        coins: 0,
+                        last_claimed_at: null,
+                        current_streak: 0
+                    };
                 }
 
                 const now = new Date();
-                const lastClaimed = profile.last_claimed_at ? new Date(profile.last_claimed_at) : null;
+                const lastClaimed = profileData.last_claimed_at ? new Date(profileData.last_claimed_at) : null;
 
                 let newStreak = 1;
                 let canClaim = false;
@@ -119,7 +125,7 @@ app.prepare().then(() => {
                         return;
                     } else if (diffDays === 1) {
                         // Consecutive day
-                        newStreak = (profile.current_streak || 0) + 1;
+                        newStreak = (profileData.current_streak || 0) + 1;
                         if (newStreak > 7) newStreak = 1;
                         canClaim = true;
                     } else {
@@ -131,17 +137,17 @@ app.prepare().then(() => {
 
                 if (canClaim) {
                     const reward = newStreak * 10;
-                    const newCoins = (profile.coins || 0) + reward;
+                    const newCoins = (profileData.coins || 0) + reward;
                     const claimedAt = now.toISOString();
 
                     const { error: updateError } = await supabase
                         .from('profiles')
-                        .update({
+                        .upsert({
+                            id: userId,
                             coins: newCoins,
                             last_claimed_at: claimedAt,
                             current_streak: newStreak
-                        })
-                        .eq('id', userId);
+                        });
 
                     if (updateError) {
                         socket.emit('purchaseError', 'Error al reclamar: ' + updateError.message);
@@ -166,18 +172,15 @@ app.prepare().then(() => {
                     .eq('id', userId)
                     .single();
 
-                if (fetchError) {
-                    socket.emit('purchaseError', 'User profile not found');
-                    return;
-                }
-
-                const currentAmount = type === 'coins' ? (profile.coins || 0) : (profile.gems || 0);
+                const currentAmount = profile ? (type === 'coins' ? (profile.coins || 0) : (profile.gems || 0)) : 0;
                 const newValue = parseInt(currentAmount) + parseInt(amount);
 
                 const { error: updateError } = await supabase
                     .from('profiles')
-                    .update({ [type]: newValue })
-                    .eq('id', userId);
+                    .upsert({
+                        id: userId,
+                        [type]: newValue
+                    });
 
                 if (updateError) {
                     socket.emit('purchaseError', updateError.message);

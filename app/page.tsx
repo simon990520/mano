@@ -19,6 +19,7 @@ import { OnboardingModal } from '@/app/components/Modals/OnboardingModal';
 import { GameOverModal } from '@/app/components/Modals/GameOverModal';
 import { PlayerStatsModal } from '@/app/components/Modals/PlayerStatsModal';
 import { ErrorModal } from '@/app/components/Modals/ErrorModal';
+import { SuccessModal } from '@/app/components/Modals/SuccessModal';
 
 export default function Home() {
     const { user, isSignedIn } = useUser();
@@ -307,6 +308,30 @@ export default function Home() {
                 message={gameData.errorModal.message}
                 onClose={gameActions.closeError}
             />
+
+            <ErrorModal
+                isOpen={economyState.errorModal.isOpen}
+                title={economyState.errorModal.title}
+                message={economyState.errorModal.message}
+                onClose={economyActions.closeError}
+            />
+
+            <SuccessModal
+                isOpen={economyState.successModal.isOpen}
+                title={economyState.successModal.title}
+                message={economyState.successModal.message}
+                onClose={economyActions.closeSuccess}
+            />
+
+            {economyState.showOnboarding && (
+                <OnboardingModal
+                    username={economyState.username}
+                    setUsername={economyActions.setUsername}
+                    birthDate={economyState.birthDate}
+                    setBirthDate={economyActions.setBirthDate}
+                    onSave={economyActions.handleSaveProfile}
+                />
+            )}
         </>
     );
 }
