@@ -7,9 +7,6 @@ import { useAudioController } from '@/app/controllers/useAudioController';
 import { useEconomyController } from '@/app/controllers/useEconomyController';
 import { useGameController } from '@/app/controllers/useGameController';
 import { supabase } from '@/app/services/supabase';
-
-import { WelcomeBonusModal } from '@/app/components/Modals/WelcomeBonusModal';
-
 // Components
 import { Header } from '@/app/components/layout/Header';
 import { LobbyScreen } from '@/app/components/Lobby/LobbyScreen';
@@ -333,10 +330,6 @@ export default function Home() {
                     setBirthDate={economyActions.setBirthDate}
                     onSave={economyActions.handleSaveProfile}
                 />
-            )}
-
-            {economyState.showWelcomeBonus && (
-                <WelcomeBonusModal onClaim={economyActions.handleClaimWelcomeBonus} />
             )}
         </>
     );

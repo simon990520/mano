@@ -65,14 +65,25 @@ app.prepare().then(() => {
         socket.on('updateProfile', async (data) => {
             const { username, birthDate } = data;
             try {
+                // Determine if it's a new or existing profile
+                const { data: existing, error: fetchError } = await supabase
+                    .from('profiles')
+                    .select('coins, gems')
+                    .eq('id', userId)
+                    .maybeSingle();
+
+                const isNew = !existing;
+                const startingCoins = isNew ? 30 : (existing.coins || 0);
+                const startingGems = isNew ? 0 : (existing.gems || 0);
+
                 const { error } = await supabase
                     .from('profiles')
                     .upsert({
                         id: userId,
                         username,
                         birth_date: birthDate,
-                        coins: 0,
-                        gems: 0,
+                        coins: startingCoins,
+                        gems: startingGems,
                         updated_at: new Date().toISOString()
                     });
 
@@ -80,7 +91,8 @@ app.prepare().then(() => {
                     console.error('[SERVER_DB] Profile update error:', error.message);
                     socket.emit('profileUpdateError', error.message);
                 } else {
-                    socket.emit('profileUpdated');
+                    console.log(`[SERVER_DB] Profile for ${userId} updated. New: ${isNew}, Coins: ${startingCoins}`);
+                    socket.emit('profileUpdated', { coins: startingCoins, gems: startingGems });
                 }
             } catch (err) {
                 console.error('[SERVER_DB] Profile update exception:', err.message);
@@ -160,24 +172,6 @@ app.prepare().then(() => {
             } catch (err) {
                 console.error('[STREAK_ERROR]', err);
                 socket.emit('purchaseError', 'Internal Streak Error');
-            }
-        });
-
-        socket.on('claimWelcomeBonus', async () => {
-            try {
-                const { data: profile } = await supabase.from('profiles').select('coins').eq('id', userId).single();
-                const currentCoins = profile?.coins || 0;
-                const newCoins = currentCoins + 30;
-
-                const { error: updateError } = await supabase.from('profiles').upsert({ id: userId, coins: newCoins });
-                if (updateError) {
-                    socket.emit('purchaseError', 'Error al reclamar bono: ' + updateError.message);
-                } else {
-                    socket.emit('purchaseSuccess', { type: 'coins', newValue: newCoins });
-                    console.log(`[BONUS] Welcome bonus of 30 coins granted to ${userId}`);
-                }
-            } catch (err) {
-                socket.emit('purchaseError', 'Internal Bonus Error');
             }
         });
 

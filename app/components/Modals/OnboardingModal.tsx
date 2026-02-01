@@ -1,4 +1,5 @@
 import React from 'react';
+import Image from 'next/image';
 
 interface OnboardingModalProps {
     username: string;
@@ -17,8 +18,18 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 }) => {
     return (
         <div className="modal-overlay" style={{ zIndex: 30000 }}>
-            <div className="modal-content">
-                <h2 className="modal-title">¡BIENVENIDO!</h2>
+            <div className="modal-content" style={{ padding: '30px' }}>
+                <div style={{ marginBottom: '20px', borderRadius: '15px', overflow: 'hidden' }}>
+                    <Image
+                        src="/assets/images/welcome_banner.png"
+                        alt="Bono de Bienvenida"
+                        width={400}
+                        height={120}
+                        layout="responsive"
+                        className="welcome-banner-img"
+                    />
+                </div>
+                <h2 className="modal-title" style={{ fontSize: '1.5rem', marginBottom: '20px' }}>¡BIENVENIDO!</h2>
                 <div className="input-group">
                     <label className="input-label">Elige tu nombre de luchador</label>
                     <input
