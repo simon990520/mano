@@ -73,14 +73,15 @@ app.prepare().then(() => {
                     .maybeSingle();
 
                 // WELCOME BONUS: Only if they don't have a username yet
-                const isNewOnboarding = !existing || !existing.username;
+                const isNewOnboarding = !existing || !existing.username || existing.username.trim() === '';
+                console.log(`[BONUS_LOG] Checking bonus for ${userId}. Existing username: "${existing?.username || ''}", isNew: ${isNewOnboarding}`);
 
                 let finalCoins = (existing?.coins || 0);
                 let finalGems = (existing?.gems || 0);
 
                 if (isNewOnboarding) {
-                    finalCoins += 30; // ADD 30 coins as welcome bonus
-                    console.log(`[WELCOME_BONUS] User ${userId} is onboarding for the first time. Adding 30 coins.`);
+                    finalCoins += 30; // ADD 30
+                    console.log(`[BONUS_LOG] NEW USER DETECTED. Adding 30 coins. Total set to: ${finalCoins}`);
                 }
 
                 const { error } = await supabase

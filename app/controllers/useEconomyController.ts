@@ -116,6 +116,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
         };
 
         const onProfileUpdated = (data?: { coins?: number }) => {
+            console.log('[ECONOMY] Profile update success event received:', data);
             setShowOnboarding(false);
             if (data?.coins !== undefined) {
                 setCoins(data.coins);
