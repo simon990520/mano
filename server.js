@@ -10,6 +10,7 @@ const { clerkClient, authMiddleware } = require('./lib/clerk-server');
 const { determineWinner, getRankByRp } = require('./game/engine');
 const { waitingPlayers, waitingRanked, createPlayer, removeFromQueue } = require('./game/matchmaker');
 const { activeRooms, createRoom, findRoomById } = require('./game/roomManager');
+const { getBotChoice, createBotProfile } = require('./lib/bot-engine');
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
@@ -20,6 +21,11 @@ const handle = app.getRequestHandler();
 
 const userSockets = new Map(); // userId -> socketId (Enforce single session)
 
+// Bot configuration cache
+let botConfig = { enabled: false, lobby_wait_seconds: 25 };
+let botArenaConfigs = [];
+let botArenaStats = [];
+
 // Helper for parsing JSON body
 const getBody = (req) => new Promise((resolve) => {
     let body = '';
@@ -28,6 +34,34 @@ const getBody = (req) => new Promise((resolve) => {
         try { resolve(JSON.parse(body)); } catch (e) { resolve({}); }
     });
 });
+
+// Cargar configuración del bot desde Supabase
+async function loadBotConfig() {
+    try {
+        // Cargar configuración global
+        const { data: config } = await supabase.from('bot_config').select('*').limit(1).single();
+        if (config) {
+            botConfig = config;
+            console.log('[BOT_SYSTEM] Configuration loaded:', botConfig);
+        }
+
+        // Cargar configuración por arena
+        const { data: arenaConfigs } = await supabase.from('bot_arena_config').select('*');
+        if (arenaConfigs) {
+            botArenaConfigs = arenaConfigs;
+            console.log(`[BOT_SYSTEM] Loaded ${arenaConfigs.length} arena configurations`);
+        }
+
+        // Cargar estadísticas
+        const { data: stats } = await supabase.from('bot_arena_stats').select('*');
+        if (stats) {
+            botArenaStats = stats;
+            console.log(`[BOT_SYSTEM] Loaded stats for ${stats.length} arenas`);
+        }
+    } catch (error) {
+        console.error('[BOT_SYSTEM] Error loading configuration:', error.message);
+    }
+}
 
 app.prepare().then(() => {
     const httpServer = createServer(async (req, res) => {
@@ -47,6 +81,9 @@ app.prepare().then(() => {
             methods: ['GET', 'POST']
         }
     });
+
+    // Cargar configuración del bot al iniciar
+    loadBotConfig();
 
     io.use(authMiddleware);
     process.io = io; // Expose io for Bold Webhook access
@@ -202,6 +239,68 @@ app.prepare().then(() => {
             } catch (e) { socket.emit('adminError', e.message); }
         });
 
+        // ============ BOT ADMIN CONTROLS ============
+        socket.on('getBotConfig', async () => {
+            try {
+                await loadBotConfig(); // Refrescar cache
+                socket.emit('botConfigData', {
+                    config: botConfig,
+                    arenaConfigs: botArenaConfigs,
+                    stats: botArenaStats
+                });
+            } catch (e) {
+                socket.emit('adminError', 'Error cargando configuración del bot');
+            }
+        });
+
+        socket.on('updateBotConfig', async (data) => {
+            const { enabled, lobby_wait_seconds } = data;
+            console.log(`[ADMIN_ACTION] UpdateBotConfig: enabled=${enabled}, wait=${lobby_wait_seconds}s`);
+            try {
+                const { error } = await supabase.from('bot_config')
+                    .update({ enabled, lobby_wait_seconds, updated_at: new Date().toISOString() })
+                    .eq('id', botConfig.id);
+
+                if (error) {
+                    console.error('[ADMIN_ERROR] updateBotConfig:', error.message);
+                    socket.emit('adminError', error.message);
+                } else {
+                    botConfig = { ...botConfig, enabled, lobby_wait_seconds }; // Update cache
+                    socket.emit('adminSuccess', 'Configuración del bot actualizada');
+                    io.to('admins').emit('botConfigUpdated', botConfig);
+                }
+            } catch (e) {
+                console.error('[ADMIN_EXCEPTION] updateBotConfig:', e.message);
+                socket.emit('adminError', e.message);
+            }
+        });
+
+        socket.on('updateArenaConfig', async (data) => {
+            const { mode, stake_tier, target_win_rate } = data;
+            console.log(`[ADMIN_ACTION] UpdateArenaConfig: ${mode}/${stake_tier} -> ${target_win_rate}%`);
+            try {
+                const { error } = await supabase.from('bot_arena_config')
+                    .update({ target_win_rate, updated_at: new Date().toISOString() })
+                    .match({ mode, stake_tier });
+
+                if (error) {
+                    console.error('[ADMIN_ERROR] updateArenaConfig:', error.message);
+                    socket.emit('adminError', error.message);
+                } else {
+                    // Update cache
+                    const idx = botArenaConfigs.findIndex(c => c.mode === mode && c.stake_tier === stake_tier);
+                    if (idx !== -1) {
+                        botArenaConfigs[idx].target_win_rate = target_win_rate;
+                    }
+                    socket.emit('adminSuccess', `Arena ${mode}/${stake_tier} actualizada`);
+                }
+            } catch (e) {
+                console.error('[ADMIN_EXCEPTION] updateArenaConfig:', e.message);
+                socket.emit('adminError', e.message);
+            }
+        });
+
+
         socket.on('adminUpdateProfile', async (data) => {
             const { targetUserId, username, rank } = data;
             console.log(`[ADMIN_ACTION] UpdateProfile: ${targetUserId} to ${username}/${rank}`);
@@ -322,6 +421,8 @@ app.prepare().then(() => {
 
                 if (queueMap[queueKey] && queueMap[queueKey].length > 0) {
                     const opponent = queueMap[queueKey].shift();
+                    if (opponent.botTimer) clearTimeout(opponent.botTimer);
+
                     const room = createRoom(player, opponent);
                     room.mode = mode;
                     room.stakeTier = currentStake;
@@ -347,6 +448,55 @@ app.prepare().then(() => {
                     if (!queueMap[queueKey]) queueMap[queueKey] = [];
                     queueMap[queueKey].push(player);
                     socket.emit('waiting');
+
+                    // [BOT SYSTEM] Timer Start
+                    if (botConfig.enabled && queueMap[queueKey].length === 1) {
+                        const waitTime = (botConfig.lobby_wait_seconds || 25) * 1000;
+                        console.log(`[BOT_SYSTEM] Timer started for ${userId}: ${waitTime}ms`);
+
+                        player.botTimer = setTimeout(async () => {
+                            const currentQueue = mode === 'casual' ? waitingPlayers : waitingRanked;
+                            const idx = currentQueue[queueKey]?.findIndex(p => p.userId === userId);
+
+                            if (idx !== -1) {
+                                console.log(`[BOT_SYSTEM] Triggering bot match for ${userId}`);
+                                currentQueue[queueKey].splice(idx, 1); // Remove from queue
+
+                                const botProfile = createBotProfile();
+                                const botPlayer = createPlayer('BOT_' + Date.now(), botProfile.id, null);
+                                botPlayer.username = botProfile.username;
+                                botPlayer.isBot = true;
+
+                                const room = createRoom(player, botPlayer);
+                                room.mode = mode;
+                                room.stakeTier = currentStake;
+                                room.rank = currentRank;
+                                room.isBotGame = true;
+                                room.botPlayerId = botProfile.id;
+
+                                activeRooms.set(socket.id, room);
+                                socket.join(room.id);
+
+                                const feeResult = await processEntryFeeAtomic([player], mode, currentStake);
+                                if (!feeResult.success) {
+                                    socket.emit('matchError', 'Error al procesar entrada (Saldo insuficiente).');
+                                    return;
+                                }
+
+                                socket.emit('matchFound', {
+                                    roomId: room.id,
+                                    playerIndex: 0,
+                                    opponentId: botProfile.id,
+                                    opponentImageUrl: null,
+                                    stakeTier: currentStake,
+                                    mode,
+                                    rank: currentRank
+                                });
+
+                                setTimeout(() => startCountdown(room.id), 1000);
+                            }
+                        }, waitTime);
+                    }
                 }
             } catch (err) {
                 socket.emit('matchError', 'Error al cargar perfil.');
@@ -366,7 +516,20 @@ app.prepare().then(() => {
             const player = room.players.find(p => p.socketId === socket.id);
             if (player) {
                 player.choice = choice;
-                if (room.players[0].choice && room.players[1].choice) resolveRound(room);
+
+                // [BOT SYSTEM] Instant Bot Reply
+                if (room.isBotGame && !room.botReplied) {
+                    const botPlayer = room.players.find(p => p.isBot);
+                    if (botPlayer) {
+                        botPlayer.choice = getBotChoice(room, botPlayer, botArenaStats);
+                        room.botReplied = true; // Flag to prevent double choice in same round
+                    }
+                }
+
+                if (room.players[0].choice && room.players[1].choice) {
+                    room.botReplied = false; // Reset for next round
+                    resolveRound(room);
+                }
             }
         });
 
@@ -536,6 +699,7 @@ app.prepare().then(() => {
     function startRound(room) {
         if (!room || room.state === 'gameOver') return;
         room.state = 'playing';
+        room.botReplied = false;
         room.players.forEach(p => p.choice = null);
         room.turnTimer = 5;
         io.to(room.id).emit('roundStart', room.round);
@@ -635,6 +799,8 @@ app.prepare().then(() => {
         if (p1.score === p2.score && !forcedWinnerId) winnerId = 'tie';
 
         const updateData = async (player, isWinner) => {
+            if (player.isBot) return { newCoins: 999999, newGems: 999999, prize: 0, rpChange: 0, newRp: 1000, newRank: 'MAESTRO' };
+
             const { data: profile } = await supabase.from('profiles').select('id, coins, gems, rp, rank_name, total_wins, total_games').eq('id', player.userId).single();
             if (!profile) return {};
             let updates = { total_wins: isWinner ? (profile.total_wins || 0) + 1 : (profile.total_wins || 0), total_games: (profile.total_games || 0) + 1 };
@@ -665,7 +831,45 @@ app.prepare().then(() => {
         };
 
         const [p1Res, p2Res] = await Promise.all([updateData(p1, winnerId === p1.userId), updateData(p2, winnerId === p2.userId)]);
-        await recordMatch({ player1_id: p1.userId, player2_id: p2.userId, winner_id: winnerId === 'tie' ? null : winnerId, p1_score: p1.score, p2_score: p2.score, mode: room.mode, stake: room.stakeTier, created_at: new Date().toISOString() });
+
+        if (!p1.isBot && !p2.isBot) {
+            await recordMatch({ player1_id: p1.userId, player2_id: p2.userId, winner_id: winnerId === 'tie' ? null : winnerId, p1_score: p1.score, p2_score: p2.score, mode: room.mode, stake: room.stakeTier, created_at: new Date().toISOString() });
+        }
+
+        // [BOT SYSTEM] Update Bot Statistics
+        const botPlayer = room.players.find(p => p.isBot);
+        if (botPlayer) {
+            const isBotWinner = winnerId === botPlayer.userId;
+            const isTie = winnerId === 'tie';
+
+            // Update local cache
+            const statEntry = botArenaStats.find(s => s.mode === room.mode && s.stake_tier === room.stakeTier);
+            if (statEntry) {
+                statEntry.total_games = (statEntry.total_games || 0) + 1;
+                if (isBotWinner) statEntry.total_wins = (statEntry.total_wins || 0) + 1;
+                else if (!isTie) statEntry.total_losses = (statEntry.total_losses || 0) + 1;
+
+                // Update win rate
+                if (statEntry.total_games > 0) {
+                    statEntry.current_win_rate = (statEntry.total_wins / statEntry.total_games) * 100;
+                }
+                statEntry.last_game_at = new Date().toISOString();
+
+                // Update DB and notify admins
+                supabase.from('bot_arena_stats')
+                    .update({
+                        total_games: statEntry.total_games,
+                        total_wins: statEntry.total_wins,
+                        total_losses: statEntry.total_losses,
+                        last_game_at: statEntry.last_game_at
+                    })
+                    .match({ mode: room.mode, stake_tier: room.stakeTier })
+                    .then(({ error }) => {
+                        if (error) console.error('[BOT_STATS] DB Update error:', error.message);
+                        else io.to('admins').emit('botConfigData', { config: botConfig, arenaConfigs: botArenaConfigs, stats: botArenaStats });
+                    });
+            }
+        }
         room.players.forEach(p => {
             if (!p.disconnected) {
                 const res = p.userId === p1.userId ? p1Res : p2Res;
