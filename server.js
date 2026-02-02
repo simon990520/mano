@@ -68,7 +68,7 @@ app.prepare().then(() => {
                 // Fetch existing profile to check columns
                 const { data: existing } = await supabase
                     .from('profiles')
-                    .select('username, birth_date, coins, gems')
+                    .select('id, username, birth_date, coins, gems')
                     .eq('id', userId)
                     .maybeSingle();
 
@@ -180,6 +180,68 @@ app.prepare().then(() => {
             } catch (err) {
                 console.error('[STREAK_ERROR]', err);
                 socket.emit('purchaseError', 'Internal Streak Error');
+            }
+        });
+
+        socket.on('joinAdmin', () => {
+            socket.join('admins');
+            console.log(`[ADMIN] Socket ${socket.id} joined admin room.`);
+            // Send initial users list upon joining
+            socket.emit('adminDataRefreshed');
+        });
+
+        socket.on('adminGetUsers', async () => {
+            try {
+                const { data, error } = await supabase.from('profiles').select('id, username, coins, gems, rp, rank_name, total_wins, total_games');
+                if (error) {
+                    console.error('[ADMIN_ERROR] adminGetUsers:', error.message);
+                    socket.emit('adminError', error.message);
+                } else {
+                    socket.emit('adminUsersList', data);
+                }
+            } catch (e) { socket.emit('adminError', e.message); }
+        });
+
+        socket.on('adminUpdateProfile', async (data) => {
+            const { targetUserId, username, rank } = data;
+            console.log(`[ADMIN_ACTION] UpdateProfile: ${targetUserId} to ${username}/${rank}`);
+            try {
+                const { error } = await supabase.from('profiles').update({ username, rank_name: rank }).eq('id', targetUserId);
+                if (error) {
+                    console.error('[ADMIN_ERROR] updateProfile:', error.message);
+                    socket.emit('adminError', error.message);
+                } else {
+                    socket.emit('adminSuccess', 'Perfil actualizado con éxito');
+                    io.to('admins').emit('adminDataRefreshed');
+                }
+            } catch (e) {
+                console.error('[ADMIN_EXCEPTION] updateProfile:', e.message);
+                socket.emit('adminError', e.message);
+            }
+        });
+
+        socket.on('adminTransferBalance', async (data) => {
+            const { targetUserId, type, amount, operation } = data;
+            console.log(`[ADMIN_ACTION] Transfer: ${operation} ${amount} ${type} to ${targetUserId}`);
+            try {
+                const { data: p, error: fError } = await supabase.from('profiles').select('coins, gems').eq('id', targetUserId).single();
+                if (fError || !p) return socket.emit('adminError', 'Usuario no encontrado');
+
+                const isCoins = type === 'coins';
+                const current = isCoins ? (p.coins || 0) : (p.gems || 0);
+                const newVal = Math.max(0, operation === 'add' ? current + amount : current - amount);
+
+                const { error } = await supabase.from('profiles').update({ [isCoins ? 'coins' : 'gems']: newVal }).eq('id', targetUserId);
+                if (error) {
+                    console.error('[ADMIN_ERROR] transferBalance:', error.message);
+                    socket.emit('adminError', error.message);
+                } else {
+                    socket.emit('adminSuccess', `Balance actualizado: ${newVal} ${type}`);
+                    io.to('admins').emit('adminDataRefreshed');
+                }
+            } catch (e) {
+                console.error('[ADMIN_EXCEPTION] transferBalance:', e.message);
+                socket.emit('adminError', e.message);
             }
         });
 
@@ -448,7 +510,7 @@ app.prepare().then(() => {
         socket.on('getPlayerStats', async (targetUserId) => {
             try {
                 const { data: profile } = await supabase.from('profiles').select('id, username, rank_name, total_wins, total_games').eq('id', targetUserId).single();
-                const { data: stats } = await supabase.from('player_stats').select('*').eq('user_id', targetUserId).single();
+                const { data: stats } = await supabase.from('player_stats').select('user_id, matches_played, wins, rock_count, paper_count, scissors_count').eq('user_id', targetUserId).single();
                 socket.emit('playerStatsData', { ...profile, ranked_stats: stats ? { matches: stats.matches_played, wins: stats.wins, rock: stats.rock_count, paper: stats.paper_count, scissors: stats.scissors_count, openings: { rock: stats.opening_rock, paper: stats.opening_paper, scissors: stats.opening_scissors } } : null });
             } catch (err) { }
         });
@@ -573,7 +635,7 @@ app.prepare().then(() => {
         if (p1.score === p2.score && !forcedWinnerId) winnerId = 'tie';
 
         const updateData = async (player, isWinner) => {
-            const { data: profile } = await supabase.from('profiles').select('*').eq('id', player.userId).single();
+            const { data: profile } = await supabase.from('profiles').select('id, coins, gems, rp, rank_name, total_wins, total_games').eq('id', player.userId).single();
             if (!profile) return {};
             let updates = { total_wins: isWinner ? (profile.total_wins || 0) + 1 : (profile.total_wins || 0), total_games: (profile.total_games || 0) + 1 };
             let resultData = { rpChange: 0, newRp: profile.rp, newRank: profile.rank_name, prize: 0 };
@@ -613,5 +675,31 @@ app.prepare().then(() => {
         room.cleanupTimer = setTimeout(() => room.players.forEach(p => { if (activeRooms.get(p.socketId) === room) activeRooms.delete(p.socketId); }), 15000);
     }
 
-    httpServer.once('error', (err) => { console.error(err); process.exit(1); }).listen(port, () => { console.log(`> Ready on http://${hostname}:${port}`); });
+    // Real-time Stats Broadcast (Every 5 seconds)
+    setInterval(async () => {
+        try {
+            const { data } = await supabase.from('profiles').select('coins, gems');
+            const coins = data?.reduce((acc, p) => acc + (p.coins || 0), 0) || 0;
+            const gems = data?.reduce((acc, p) => acc + (p.gems || 0), 0) || 0;
+            io.to('admins').emit('adminRealtimeStats', {
+                online: userSockets.size,
+                activeGames: Array.from(activeRooms.values()).filter((v, i, a) => a.indexOf(v) === i).length, // Unique rooms count
+                coinsInCirc: coins,
+                gemsInCirc: gems,
+                totalUsers: data?.length || 0,
+                timestamp: new Date().toISOString()
+            });
+        } catch (e) { console.error('[ADMIN_STATS] Error:', e.message); }
+    }, 5000);
+
+    httpServer.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.error(`[SERVER_FATAL] Port ${port} is already in use. Please kill the other process.`);
+        } else {
+            console.error('[SERVER_FATAL] Unexpected error:', err);
+        }
+        process.exit(1);
+    }).listen(port, () => {
+        console.log(`> Ready on http://${hostname}:${port}`);
+    });
 });

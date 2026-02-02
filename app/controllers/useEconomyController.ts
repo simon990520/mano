@@ -39,7 +39,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
         if (!isSignedIn || !user) return;
         const { data, error } = await supabase
             .from('profiles')
-            .select('*')
+            .select('id, username, birth_date, coins, gems, rp, rank_name, current_streak, last_claimed_at')
             .eq('id', user.id)
             .single();
 

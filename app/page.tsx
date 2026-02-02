@@ -371,14 +371,14 @@ function LeaderboardWrapper({ onClose, onShowStats }: { onClose: () => void, onS
                 const winnerIds = Object.keys(winCounts);
                 if (winnerIds.length === 0) {
                     // Fallback to total wins if no recent matches
-                    const { data: allTime } = await supabase.from('profiles').select('*').order('total_wins', { ascending: false }).limit(10);
+                    const { data: allTime } = await supabase.from('profiles').select('id, username, coins, gems, rp, rank_name, total_wins').order('total_wins', { ascending: false }).limit(10);
                     setData(allTime || []);
                     return;
                 }
 
                 const { data: profiles, error: profilesError } = await supabase
                     .from('profiles')
-                    .select('*')
+                    .select('id, username, coins, gems, rp, rank_name, total_wins')
                     .in('id', winnerIds);
 
                 if (profilesError) throw profilesError;
@@ -393,7 +393,7 @@ function LeaderboardWrapper({ onClose, onShowStats }: { onClose: () => void, onS
             } catch (err) {
                 console.error('[LEADERBOARD] Fetch error:', err);
                 // Last ditch fallback
-                const { data: fallback } = await supabase.from('profiles').select('*').order('total_wins', { ascending: false }).limit(10);
+                const { data: fallback } = await supabase.from('profiles').select('id, username, coins, gems, rp, rank_name, total_wins').order('total_wins', { ascending: false }).limit(10);
                 setData(fallback || []);
             }
         };

@@ -17,7 +17,7 @@ export const useEconomy = (isSignedIn: boolean | undefined, user: any, socket: a
         if (!isSignedIn || !user) return;
         const { data, error } = await supabase
             .from('profiles')
-            .select('*')
+            .select('id, username, birth_date, coins, gems, rp, rank_name')
             .eq('id', user.id)
             .single();
 
