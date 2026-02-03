@@ -851,9 +851,18 @@ app.prepare().then(() => {
 
         const [p1Res, p2Res] = await Promise.all([updateData(p1, winnerId === p1.userId), updateData(p2, winnerId === p2.userId)]);
 
-        if (!p1.isBot && !p2.isBot) {
-            await recordMatch({ player1_id: p1.userId, player2_id: p2.userId, winner_id: winnerId === 'tie' ? null : winnerId, p1_score: p1.score, p2_score: p2.score, mode: room.mode, stake: room.stakeTier, created_at: new Date().toISOString() });
-        }
+        // Record ALL matches (including Bot matches) so they appear in Rankings
+        await recordMatch({
+            player1_id: p1.userId,
+            player2_id: p2.userId,
+            winner_id: winnerId === 'tie' ? null : winnerId,
+            p1_score: p1.score,
+            p2_score: p2.score,
+            mode: room.mode,
+            stake: room.stakeTier,
+            created_at: new Date().toISOString(),
+            is_bot_match: p1.isBot || p2.isBot // New flag for filtering if needed
+        });
 
         // [BOT SYSTEM] Update Bot Statistics
         const botPlayer = room.players.find(p => p.isBot);

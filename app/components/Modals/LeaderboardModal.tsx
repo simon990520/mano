@@ -9,9 +9,10 @@ interface LeaderboardModalProps {
     setTimeFilter: (filter: 'daily' | 'weekly' | 'monthly') => void;
     onShowStats?: (userId: string, imageUrl?: string) => void;
     currentUserId?: string;
+    loading?: boolean;
 }
 
-export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, leaderboardData, timeFilter, setTimeFilter, onShowStats, currentUserId }) => {
+export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, leaderboardData, timeFilter, setTimeFilter, onShowStats, currentUserId, loading }) => {
     return (
         <div className="leaderboard-overlay">
             <div className="leaderboard-card">
@@ -71,9 +72,13 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, lea
                 </div>
 
                 <div className="leaderboard-list">
-                    {leaderboardData.slice(3).length === 0 ? (
+                    {loading ? (
+                        <div style={{ textAlign: 'center', opacity: 0.5, padding: '40px', fontSize: '1.2rem' }}>
+                            🔄 Cargando Ranking...
+                        </div>
+                    ) : leaderboardData.slice(3).length === 0 ? (
                         <div style={{ textAlign: 'center', opacity: 0.5, padding: '20px', fontSize: '0.9rem' }}>
-                            {leaderboardData.length <= 3 ? "No hay más competidores..." : "Cargando..."}
+                            {leaderboardData.length === 0 ? "No hay registros en este periodo" : "No hay más competidores..."}
                         </div>
                     ) : (
                         leaderboardData.slice(3).map((player, index) => (

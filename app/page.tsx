@@ -185,6 +185,7 @@ export default function Home() {
                     type="coins"
                     onClose={() => economyActions.setShowCoinShop(false)}
                     onPurchase={economyActions.handlePurchase}
+                    onWithdraw={economyActions.handleWithdraw}
                     currentStreak={economyState.currentStreak}
                     lastClaimedAt={economyState.lastClaimedAt}
                 />
@@ -195,6 +196,7 @@ export default function Home() {
                     type="gems"
                     onClose={() => economyActions.setShowGemShop(false)}
                     onPurchase={economyActions.handlePurchase}
+                    onWithdraw={economyActions.handleWithdraw}
                 />
             )}
 
@@ -339,18 +341,37 @@ export default function Home() {
 function LeaderboardWrapper({ onClose, onShowStats }: { onClose: () => void, onShowStats: (id: string, img?: string) => void }) {
     const [data, setData] = useState<any[]>([]);
     const [filter, setFilter] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         const fetchLeaderboard = async () => {
             try {
-                // Get time bounds
+                // Get time bounds (Normalized to start of period)
                 const now = new Date();
                 let since = new Date();
-                if (filter === 'daily') since.setDate(now.getDate() - 1);
-                else if (filter === 'weekly') since.setDate(now.getDate() - 7);
-                else since.setMonth(now.getMonth() - 1);
 
+                if (filter === 'daily') {
+                    since.setHours(0, 0, 0, 0);
+                } else if (filter === 'weekly') {
+                    const day = now.getDay(); // 0 is Sunday
+                    const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+                    since.setDate(diff);
+                    since.setHours(0, 0, 0, 0);
+                } else {
+                    since.setDate(1);
+                    since.setHours(0, 0, 0, 0);
+                }
+
+                setLoading(true);
                 const sinceIso = since.toISOString();
+                console.log(`[LEADERBOARD] Fetching for filter: ${filter}, since: ${sinceIso}`);
+
+                // DEBUG: Sanity Check - Do ANY matches exist?
+                const { data: sanityCheck, error: sanityError } = await supabase
+                    .from('matches')
+                    .select('id, created_at, winner_id')
+                    .limit(5);
+                console.log('[LEADERBOARD] Sanity check (last 5 matches):', sanityCheck, sanityError);
 
                 // 1. Get matches in the timeframe
                 const { data: matches, error: matchesError } = await supabase
@@ -360,6 +381,7 @@ function LeaderboardWrapper({ onClose, onShowStats }: { onClose: () => void, onS
                     .gte('created_at', sinceIso);
 
                 if (matchesError) throw matchesError;
+                console.log(`[LEADERBOARD] Matches found: ${matches.length}`);
 
                 // 2. Count wins per player
                 const winCounts: { [key: string]: number } = {};
@@ -370,9 +392,8 @@ function LeaderboardWrapper({ onClose, onShowStats }: { onClose: () => void, onS
                 // 3. Get profiles of the winners
                 const winnerIds = Object.keys(winCounts);
                 if (winnerIds.length === 0) {
-                    // Fallback to total wins if no recent matches
-                    const { data: allTime } = await supabase.from('profiles').select('id, username, coins, gems, rp, rank_name, total_wins').order('total_wins', { ascending: false }).limit(10);
-                    setData(allTime || []);
+                    console.log('[LEADERBOARD] No winners in this period. Clearing data.');
+                    setData([]);
                     return;
                 }
 
@@ -392,15 +413,16 @@ function LeaderboardWrapper({ onClose, onShowStats }: { onClose: () => void, onS
                 setData(combined);
             } catch (err) {
                 console.error('[LEADERBOARD] Fetch error:', err);
-                // Last ditch fallback
                 const { data: fallback } = await supabase.from('profiles').select('id, username, coins, gems, rp, rank_name, total_wins').order('total_wins', { ascending: false }).limit(10);
                 setData(fallback || []);
+            } finally {
+                setLoading(false);
             }
         };
         fetchLeaderboard();
     }, [filter]);
 
-    return <LeaderboardModal leaderboardData={data} timeFilter={filter} setTimeFilter={setFilter} onClose={onClose} onShowStats={onShowStats} />;
+    return <LeaderboardModal leaderboardData={data} timeFilter={filter} setTimeFilter={setFilter} onClose={onClose} onShowStats={onShowStats} loading={loading} />;
 }
 
 function useLocalUI() {

@@ -4,11 +4,12 @@ interface ShopModalProps {
     type: 'coins' | 'gems';
     onClose: () => void;
     onPurchase: (type: 'coins' | 'gems', amount: number) => void;
+    onWithdraw?: (type: 'coins' | 'gems') => void;
     currentStreak?: number;
     lastClaimedAt?: string | null;
 }
 
-export const ShopModal: React.FC<ShopModalProps> = ({ type, onClose, onPurchase, currentStreak = 0, lastClaimedAt }) => {
+export const ShopModal: React.FC<ShopModalProps> = ({ type, onClose, onPurchase, onWithdraw, currentStreak = 0, lastClaimedAt }) => {
     const isCoins = type === 'coins';
     const title = isCoins ? 'COIN SHOP' : 'GEM SHOP';
     const icon = isCoins ? '🪙' : '💎';
@@ -83,6 +84,17 @@ export const ShopModal: React.FC<ShopModalProps> = ({ type, onClose, onPurchase,
                         );
                     })}
                 </div>
+                {onWithdraw && (
+                    <div style={{ marginTop: '20px', textAlign: 'center' }}>
+                        <button
+                            className="btn-secondary"
+                            style={{ width: '100%', padding: '15px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+                            onClick={() => onWithdraw(type)}
+                        >
+                            📲 RETIRAR A NEQUI
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

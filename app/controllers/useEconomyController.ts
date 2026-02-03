@@ -167,6 +167,8 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
     }, [socket]);
 
 
+    const effectiveUsername = username || 'Jugador';
+
     const handlePurchase = async (type: 'coins' | 'gems', amount: number) => {
         console.log(`[ECONOMY] handlePurchase triggered: ${type}, amount: ${amount}`);
 
@@ -175,33 +177,25 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             return;
         }
 
+        // 1. Get accurate username from DB or generic fallback
+        let finalUsername = username;
+        if (!finalUsername || finalUsername === user?.username) {
+            console.log('[ECONOMY] State username empty or matches Clerk, fetching strictly from DB...');
+            const { data } = await supabase.from('profiles').select('username').eq('id', user.id).single();
+            finalUsername = data?.username || 'Jugador';
+        }
+
         // DAILY STREAK CLAIM (Replaces Ads/WhatsApp for 10 coins)
         if (type === 'coins' && amount === 10) {
+            console.log('[ECONOMY] Claiming daily reward replacement');
             handleClaimDaily();
             return;
         }
 
-        // MANUAL WHATSAPP INTEGRATION
-        const prices: { [key: number]: number } = {
-            50: 5000,
-            100: 10000,
-            250: 25000,
-            500: 50000,
-            1000: type === 'coins' ? 100000 : 1000000
-        };
-
-        const price = prices[amount];
-        if (!price) {
-            console.error('Invalid amount selected');
-            return;
-        }
-
-        playSound('/sounds/sfx/click.mp3');
-
         // WHATSAPP REDIRECTION
         const phoneNumber = '573506049629';
         const itemType = type === 'coins' ? 'monedas' : 'gemas';
-        const message = `Hola soy ${username} deseo comprar ${amount} ${itemType}`;
+        const message = `Hola soy ${finalUsername} deseo comprar ${amount} ${itemType}`;
         const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
 
         // GTM Analytics
@@ -213,6 +207,8 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             });
         }
 
+        console.log('[ECONOMY] Opening WhatsApp for purchase:', whatsappUrl);
+        playSound('/sounds/sfx/click.mp3');
         window.open(whatsappUrl, '_blank');
     };
 
@@ -221,6 +217,28 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             socket.emit('claimDailyReward');
             playSound('/sounds/sfx/click.mp3');
         }
+    };
+
+    const handleWithdraw = async (type: 'coins' | 'gems') => {
+        console.log('[ECONOMY] handleWithdraw called for:', type);
+
+        if (!isSignedIn || !user) return;
+
+        // 1. Get accurate username from DB or generic fallback
+        let finalUsername = username;
+        if (!finalUsername || finalUsername === user?.username) {
+            console.log('[ECONOMY] State username empty or matches Clerk, fetching strictly from DB...');
+            const { data } = await supabase.from('profiles').select('username').eq('id', user.id).single();
+            finalUsername = data?.username || 'Jugador';
+        }
+
+        console.log('[ECONOMY] Opening WhatsApp for withdrawal...');
+        playSound('/sounds/sfx/click.mp3');
+        const phoneNumber = '573506049629';
+        const itemType = type === 'coins' ? 'monedas' : 'gemas';
+        const message = `Hola soy ${finalUsername} y deseo retirar ${itemType}`;
+        const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+        window.open(whatsappUrl, '_blank');
     };
 
     const handleSaveProfile = () => {
@@ -273,6 +291,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             setBirthDate,
             handlePurchase,
             handleClaimDaily,
+            handleWithdraw,
             handleSaveProfile,
             checkProfile,
             handleGameOverUpdate,
