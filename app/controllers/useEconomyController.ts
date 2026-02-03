@@ -201,7 +201,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
         // WHATSAPP REDIRECTION
         const phoneNumber = '573506049629';
         const itemType = type === 'coins' ? 'monedas' : 'gemas';
-        const message = `Hola buenos dias deseo comprar ${amount} ${itemType}`;
+        const message = `Hola soy ${username} deseo comprar ${amount} ${itemType}`;
         const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
 
         // GTM Analytics

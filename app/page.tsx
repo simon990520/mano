@@ -336,7 +336,7 @@ export default function Home() {
 }
 
 // Functional Leaderboard Wrapper
-function LeaderboardWrapper({ onClose, onShowStats }: { onClose: () => void, onShowStats: (id: string) => void }) {
+function LeaderboardWrapper({ onClose, onShowStats }: { onClose: () => void, onShowStats: (id: string, img?: string) => void }) {
     const [data, setData] = useState<any[]>([]);
     const [filter, setFilter] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
 

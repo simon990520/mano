@@ -672,8 +672,27 @@ app.prepare().then(() => {
 
         socket.on('getPlayerStats', async (targetUserId) => {
             try {
+                // [BOT SYSTEM] Virtual Bot Profile
+                if (targetUserId === 'bot_ai_opponent') {
+                    return socket.emit('playerStatsData', {
+                        id: 'bot_ai_opponent',
+                        username: '🤖 CPU Challenger',
+                        rank_name: 'MAESTRO',
+                        total_wins: 500,
+                        total_games: 1000,
+                        ranked_stats: {
+                            matches: 1000,
+                            wins: 500,
+                            rock: 333,
+                            paper: 333,
+                            scissors: 334,
+                            openings: { rock: 33, paper: 33, scissors: 34 }
+                        }
+                    });
+                }
+
                 const { data: profile } = await supabase.from('profiles').select('id, username, rank_name, total_wins, total_games').eq('id', targetUserId).single();
-                const { data: stats } = await supabase.from('player_stats').select('user_id, matches_played, wins, rock_count, paper_count, scissors_count').eq('user_id', targetUserId).single();
+                const { data: stats } = await supabase.from('player_stats').select('user_id, matches_played, wins, rock_count, paper_count, scissors_count, opening_rock, opening_paper, opening_scissors').eq('user_id', targetUserId).single();
                 socket.emit('playerStatsData', { ...profile, ranked_stats: stats ? { matches: stats.matches_played, wins: stats.wins, rock: stats.rock_count, paper: stats.paper_count, scissors: stats.scissors_count, openings: { rock: stats.opening_rock, paper: stats.opening_paper, scissors: stats.opening_scissors } } : null });
             } catch (err) { }
         });

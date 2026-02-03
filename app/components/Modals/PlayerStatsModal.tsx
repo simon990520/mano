@@ -68,12 +68,12 @@ export const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onCl
     // Helpers
     const getWinRate = () => {
         if (!stats?.ranked_stats?.matches) return 0;
-        return Math.round((stats.ranked_stats.wins / stats.ranked_stats.matches) * 100);
+        return Math.round(((stats.ranked_stats.wins || 0) / (stats.ranked_stats.matches || 1)) * 100);
     };
 
     const getFavoriteHand = () => {
         if (!stats?.ranked_stats) return '❓';
-        const { rock, paper, scissors } = stats.ranked_stats;
+        const { rock = 0, paper = 0, scissors = 0 } = stats.ranked_stats;
         if (rock === 0 && paper === 0 && scissors === 0) return '❓';
         if (rock >= paper && rock >= scissors) return '✊';
         if (paper >= rock && paper >= scissors) return '✋';
@@ -82,7 +82,7 @@ export const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onCl
 
     const getPsychProfile = () => {
         if (!stats?.ranked_stats) return 'UNKNOWN';
-        const { rock, paper, scissors } = stats.ranked_stats;
+        const { rock = 0, paper = 0, scissors = 0 } = stats.ranked_stats;
         const total = rock + paper + scissors;
         if (total < 5) return 'STALKER';
 
@@ -98,12 +98,12 @@ export const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onCl
 
     const getOpeningStats = () => {
         if (!stats?.ranked_stats?.openings) return { rock: 0, paper: 0, scissors: 0 };
-        const { rock, paper, scissors } = stats.ranked_stats.openings;
-        const total = rock + paper + scissors || 1;
+        const { rock = 0, paper = 0, scissors = 0 } = stats.ranked_stats.openings;
+        const total = (rock + paper + scissors) || 1;
         return {
-            rock: Math.round((rock / total) * 100),
-            paper: Math.round((paper / total) * 100),
-            scissors: Math.round((scissors / total) * 100)
+            rock: Math.round(((rock || 0) / total) * 100),
+            paper: Math.round(((paper || 0) / total) * 100),
+            scissors: Math.round(((scissors || 0) / total) * 100)
         };
     };
 

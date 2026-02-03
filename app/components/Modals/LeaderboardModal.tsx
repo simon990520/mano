@@ -7,7 +7,7 @@ interface LeaderboardModalProps {
     leaderboardData: any[];
     timeFilter: 'daily' | 'weekly' | 'monthly';
     setTimeFilter: (filter: 'daily' | 'weekly' | 'monthly') => void;
-    onShowStats?: (userId: string) => void;
+    onShowStats?: (userId: string, imageUrl?: string) => void;
     currentUserId?: string;
 }
 
@@ -58,7 +58,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, lea
                             <div
                                 key={player.id}
                                 className={`rank-card rank-${orderIndex + 1} clickable`}
-                                onClick={() => onShowStats && onShowStats(player.id)}
+                                onClick={() => onShowStats && onShowStats(player.id, player.image_url)}
                                 style={{ cursor: 'pointer' }}
                                 title="Ver Perfil"
                             >
@@ -80,7 +80,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ onClose, lea
                             <div
                                 key={player.id}
                                 className="leaderboard-item clickable"
-                                onClick={() => onShowStats && onShowStats(player.id)}
+                                onClick={() => onShowStats && onShowStats(player.id, player.image_url)}
                                 style={{ cursor: 'pointer' }}
                                 title="Ver Perfil"
                             >
