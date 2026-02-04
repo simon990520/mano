@@ -26,6 +26,10 @@ let botConfig = { enabled: false, lobby_wait_seconds: 25 };
 let botArenaConfigs = [];
 let botArenaStats = [];
 
+// Admin whitelist from .env
+const adminIds = (process.env.ADMIN_USER_IDS || '').split(',').map(id => id.trim());
+const isAdmin = (uId) => adminIds.includes(uId);
+
 // Helper for parsing JSON body
 const getBody = (req) => new Promise((resolve) => {
     let body = '';
@@ -102,6 +106,20 @@ app.prepare().then(() => {
         socket.on('updateProfile', async (data) => {
             const { username, birthDate } = data;
             try {
+                // Check if username is already taken by someone ELSE
+                if (username) {
+                    const { data: existingUserWithSameName, error: checkError } = await supabase
+                        .from('profiles')
+                        .select('id')
+                        .eq('username', username)
+                        .neq('id', userId)
+                        .maybeSingle();
+
+                    if (existingUserWithSameName) {
+                        return socket.emit('profileUpdateError', 'El nombre de usuario ya está en uso.');
+                    }
+                }
+
                 // Fetch existing profile to check columns
                 const { data: existing } = await supabase
                     .from('profiles')
@@ -221,6 +239,10 @@ app.prepare().then(() => {
         });
 
         socket.on('joinAdmin', () => {
+            if (!isAdmin(userId)) {
+                console.warn(`[SERVER_AUTH] Unauthorized admin access attempt by: ${userId}`);
+                return socket.emit('adminError', 'No tienes permisos de administrador.');
+            }
             socket.join('admins');
             console.log(`[ADMIN] Socket ${socket.id} joined admin room.`);
             // Send initial users list upon joining
@@ -228,6 +250,7 @@ app.prepare().then(() => {
         });
 
         socket.on('adminGetUsers', async () => {
+            if (!isAdmin(userId)) return socket.emit('adminError', 'No autorizado');
             try {
                 const { data, error } = await supabase.from('profiles').select('id, username, coins, gems, rp, rank_name, total_wins, total_games');
                 if (error) {
@@ -241,6 +264,7 @@ app.prepare().then(() => {
 
         // ============ BOT ADMIN CONTROLS ============
         socket.on('getBotConfig', async () => {
+            if (!isAdmin(userId)) return socket.emit('adminError', 'No autorizado');
             try {
                 await loadBotConfig(); // Refrescar cache
                 socket.emit('botConfigData', {
@@ -254,6 +278,7 @@ app.prepare().then(() => {
         });
 
         socket.on('updateBotConfig', async (data) => {
+            if (!isAdmin(userId)) return socket.emit('adminError', 'No autorizado');
             const { enabled, lobby_wait_seconds } = data;
             console.log(`[ADMIN_ACTION] UpdateBotConfig: enabled=${enabled}, wait=${lobby_wait_seconds}s`);
             try {
@@ -276,6 +301,7 @@ app.prepare().then(() => {
         });
 
         socket.on('updateArenaConfig', async (data) => {
+            if (!isAdmin(userId)) return socket.emit('adminError', 'No autorizado');
             const { mode, stake_tier, target_win_rate } = data;
             console.log(`[ADMIN_ACTION] UpdateArenaConfig: ${mode}/${stake_tier} -> ${target_win_rate}%`);
             try {
@@ -302,6 +328,7 @@ app.prepare().then(() => {
 
 
         socket.on('adminUpdateProfile', async (data) => {
+            if (!isAdmin(userId)) return socket.emit('adminError', 'No autorizado');
             const { targetUserId, username, rank } = data;
             console.log(`[ADMIN_ACTION] UpdateProfile: ${targetUserId} to ${username}/${rank}`);
             try {
@@ -320,6 +347,7 @@ app.prepare().then(() => {
         });
 
         socket.on('adminTransferBalance', async (data) => {
+            if (!isAdmin(userId)) return socket.emit('adminError', 'No autorizado');
             const { targetUserId, type, amount, operation } = data;
             console.log(`[ADMIN_ACTION] Transfer: ${operation} ${amount} ${type} to ${targetUserId}`);
             try {
@@ -345,6 +373,11 @@ app.prepare().then(() => {
         });
 
         socket.on('purchase', async (data) => {
+            if (!isAdmin(userId)) {
+                console.warn(`[SERVER_ECONOMY] Arbitrary purchase attempted by ${userId}. Event disabled for safety.`);
+                return socket.emit('purchaseError', 'Esta operación está deshabilitada por seguridad.');
+            }
+            // If admin, we allow for testing purposes or manual fixes
             const { type, amount } = data;
             // Legacy purchase logic - Keep for other gems/coins if needed via different flow
             // But for amount 10 it will be handled by claimDailyReward via frontend intercept

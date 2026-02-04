@@ -12,7 +12,7 @@ export const SuccessModal: React.FC<SuccessModalProps> = ({ isOpen, title, messa
     return (
         <AnimatePresence>
             {isOpen && (
-                <div className="leaderboard-overlay" style={{ zIndex: 20000 }}>
+                <div className="leaderboard-overlay" style={{ zIndex: 50000 }}>
                     <motion.div
                         initial={{ opacity: 0, scale: 0.9, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
