@@ -4,6 +4,10 @@ import './globals.css'
 export const metadata: Metadata = {
     title: 'Rock Paper Scissors - Multiplayer',
     description: 'Real-time multiplayer rock paper scissors game',
+    icons: {
+        icon: '/logo.jpg',
+        apple: '/logo.jpg',
+    },
 }
 
 import { ClerkProvider } from '@clerk/nextjs'

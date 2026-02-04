@@ -1060,7 +1060,7 @@ app.prepare().then(() => {
     // Real-time Stats Broadcast (Every 5 seconds)
     setInterval(async () => {
         try {
-            const { data } = await supabase.from('profiles').select('coins, gems');
+            const { data } = await supabase.from('profiles').select('coins, gems').neq('id', 'bot_ai_opponent');
             const coins = data?.reduce((acc, p) => acc + (p.coins || 0), 0) || 0;
             const gems = data?.reduce((acc, p) => acc + (p.gems || 0), 0) || 0;
             io.to('admins').emit('adminRealtimeStats', {
