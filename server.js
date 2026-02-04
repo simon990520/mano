@@ -387,7 +387,7 @@ app.prepare().then(() => {
                 // Use upsert if no ID exists, otherwise update
                 const query = botConfig.id ?
                     supabase.from('bot_config').update(configData).eq('id', botConfig.id) :
-                    supabase.from('bot_config').upsert({ ...configData, id: 'global_config' });
+                    supabase.from('bot_config').upsert({ ...configData, id: '00000000-0000-0000-0000-000000000000' });
 
                 const { data: updated, error } = await query.select().single();
 
