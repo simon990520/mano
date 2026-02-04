@@ -30,6 +30,18 @@ let botArenaStats = [];
 const adminIds = (process.env.ADMIN_USER_IDS || '').split(',').map(id => id.trim());
 const isAdmin = (uId) => adminIds.includes(uId);
 
+// Security: Whitelist of allowed stakes
+const ALLOWED_STAKES = [10, 100, 500, 1000];
+
+// Security: Daily reward cooldown cache (userId -> lastClaimTime)
+const dailyRewardCooldowns = new Map();
+
+// Security: Basic sanitization helper
+const sanitizeInput = (str) => {
+    if (typeof str !== 'string') return '';
+    return str.replace(/[<>]/g, '').trim().substring(0, 30); // Remove HTML tags and limit length
+};
+
 // Helper for parsing JSON body
 const getBody = (req) => new Promise((resolve) => {
     let body = '';
@@ -104,7 +116,11 @@ app.prepare().then(() => {
         userSockets.set(userId, socket.id);
 
         socket.on('updateProfile', async (data) => {
-            const { username, birthDate } = data;
+            let { username, birthDate } = data;
+
+            // SECURITY: Sanitize inputs
+            username = sanitizeInput(username);
+
             try {
                 // Check if username is already taken by someone ELSE
                 if (username) {
@@ -164,6 +180,14 @@ app.prepare().then(() => {
         });
 
         socket.on('claimDailyReward', async () => {
+            // SECURITY: Cooldown check (5 seconds between attempts)
+            const now = Date.now();
+            const lastClaim = dailyRewardCooldowns.get(userId) || 0;
+            if (now - lastClaim < 5000) {
+                return socket.emit('purchaseError', 'Espera un momento antes de reclamar de nuevo.');
+            }
+            dailyRewardCooldowns.set(userId, now);
+
             try {
                 const { data: profile, error: fetchError } = await supabase
                     .from('profiles')
@@ -411,7 +435,13 @@ app.prepare().then(() => {
         socket.on('findMatch', async (data) => {
             const imageUrl = data?.imageUrl;
             const mode = data?.mode || 'casual';
-            const stakeTier = data?.stakeTier || 10;
+            let stakeTier = parseInt(data?.stakeTier) || 10;
+
+            // SECURITY: Validate stakeTier against whitelist to prevent negative injections
+            if (!ALLOWED_STAKES.includes(stakeTier)) {
+                console.warn(`[SECURITY] Invalid stake attempt by ${userId}: ${stakeTier}`);
+                return socket.emit('matchError', 'Monto de apuesta no permitido.');
+            }
 
             try {
                 const { data: profile, error } = await supabase.from('profiles').select('coins, gems, rp').eq('id', userId).single();
@@ -424,6 +454,7 @@ app.prepare().then(() => {
                     if (profile.coins < stakeTier) return socket.emit('matchError', 'No tienes suficientes monedas.');
                 } else {
                     currentRank = getRankByRp(profile.rp || 0);
+                    // Ranked stakes might have fixed values or multipliers, but we validate against whitelist too
                     currentStake = stakeTier;
                     if (profile.gems < currentStake) return socket.emit('matchError', `Necesitas ${currentStake} gemas.`);
                 }
