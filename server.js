@@ -602,7 +602,7 @@ app.prepare().then(() => {
                     // [BOT SYSTEM] Timer Start
                     if (botConfig.enabled && queueMap[queueKey].length === 1) {
                         const waitTime = (botConfig.lobby_wait_seconds || 25) * 1000;
-                        console.log(`[BOT_SYSTEM] Timer started for ${userId}: ${waitTime}ms`);
+                        console.log(`[BOT_SYSTEM] Timer started for ${userId} in ${mode}/${currentStake}. Wait time: ${waitTime}ms`);
 
                         player.botTimer = setTimeout(async () => {
                             const currentQueue = mode === 'casual' ? waitingPlayers : waitingRanked;
