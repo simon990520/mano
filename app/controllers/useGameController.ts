@@ -104,7 +104,12 @@ export const useGameController = (
 
             if (data.stakeTier) {
                 setCurrentMatchStake(data.stakeTier);
+                setSelectedStake(data.stakeTier); // SYNC: Persist stake for future matches
                 checkProfile();
+            }
+
+            if (data.mode) {
+                setGameMode(data.mode); // SYNC: Persist mode for future matches
             }
 
             if (data?.opponentImageUrl) {
@@ -482,7 +487,15 @@ export const useGameController = (
         setOpponentImageUrl(null);
         setRematchRequested(false);
         setRematchStatus('');
-        handleFindMatch();
+
+        // SECURITY/PERSISTENCE: Use the stake from the match just ended
+        if (socket && socket.connected) {
+            socket.emit('findMatch', {
+                imageUrl: user?.imageUrl,
+                mode: gameMode,
+                stakeTier: currentMatchStake || selectedStake
+            });
+        }
     };
 
     const goToLobby = () => {

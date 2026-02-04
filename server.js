@@ -42,6 +42,9 @@ const sanitizeInput = (str) => {
     return str.replace(/[<>]/g, '').trim().substring(0, 30); // Remove HTML tags and limit length
 };
 
+// Security: Bonus claim lock (prevent concurrent/double bonus claims during onboarding burst)
+const bonusClaimLock = new Set();
+
 // Helper for parsing JSON body
 const getBody = (req) => new Promise((resolve) => {
     let body = '';
@@ -101,6 +104,27 @@ app.prepare().then(() => {
     // Cargar configuración del bot al iniciar
     loadBotConfig();
 
+    // SECURITY & SYNC: Supabase Realtime Listener (Syncs online server with local/remote admin changes)
+    const subscribeToBotConfig = () => {
+        console.log('[SUPABASE_REALTIME] Subscribing to bot configurations...');
+        supabase.channel('bot-sync')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bot_config' }, (payload) => {
+                console.log('[SUPABASE_REALTIME] Global bot config updated remotely:', payload.new);
+                botConfig = { ...botConfig, ...payload.new };
+                io.to('admins').emit('botConfigUpdated', botConfig);
+            })
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bot_arena_config' }, (payload) => {
+                console.log('[SUPABASE_REALTIME] Arena bot config updated remotely:', payload.new);
+                const idx = botArenaConfigs.findIndex(c => c.mode === payload.new.mode && c.stake_tier === payload.new.stake_tier);
+                if (idx !== -1) botArenaConfigs[idx] = { ...botArenaConfigs[idx], ...payload.new };
+                else botArenaConfigs.push(payload.new);
+            })
+            .subscribe((status) => {
+                console.log(`[SUPABASE_REALTIME] Subscription status: ${status}`);
+            });
+    };
+    subscribeToBotConfig();
+
     io.use(authMiddleware);
     process.io = io; // Expose io for Bold Webhook access
 
@@ -145,12 +169,21 @@ app.prepare().then(() => {
 
                 // WELCOME BONUS: Triggered if they haven't set their birth_date yet (our onboarding completion metric)
                 const isNewOnboarding = !existing || !existing.birth_date;
+
+                // SECURITY: Double-check if bonus was already claimed during this session/request burst
+                const alreadyClaiming = bonusClaimLock.has(userId);
+                if (isNewOnboarding && alreadyClaiming) {
+                    console.warn(`[BONUS_SECURITY] Blocked concurrent bonus claim attempt for user: ${userId}`);
+                    return socket.emit('profileUpdateError', 'Ya se está procesando tu registro.');
+                }
+
                 console.log(`[BONUS_LOG] Checking bonus for ${userId}. Has BirthDate: ${!!existing?.birth_date}, isNew: ${isNewOnboarding}`);
 
                 let finalCoins = (existing?.coins || 0);
                 let finalGems = (existing?.gems || 0);
 
                 if (isNewOnboarding) {
+                    bonusClaimLock.add(userId); // LOCK
                     finalCoins += 30; // ADD 30
                     console.log(`[BONUS_LOG] NEW USER DETECTED. Adding 30 coins. Total set to: ${finalCoins}`);
                 }
@@ -176,6 +209,12 @@ app.prepare().then(() => {
             } catch (err) {
                 console.error('[SERVER_DB] Profile update exception:', err.message);
                 socket.emit('profileUpdateError', 'Internal Error');
+            } finally {
+                // ALWAYS release the lock if it was held
+                if (bonusClaimLock.has(userId)) {
+                    // Small delay to ensure DB consistency before allowing another request
+                    setTimeout(() => bonusClaimLock.delete(userId), 2000);
+                }
             }
         });
 
