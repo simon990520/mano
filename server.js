@@ -106,24 +106,53 @@ app.prepare().then(() => {
 
     // SECURITY & SYNC: Supabase Realtime Listener (Syncs online server with local/remote admin changes)
     const subscribeToBotConfig = () => {
-        console.log('[SUPABASE_REALTIME] Subscribing to bot configurations...');
-        supabase.channel('bot-sync')
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bot_config' }, (payload) => {
-                console.log('[SUPABASE_REALTIME] Global bot config updated remotely:', payload.new);
-                botConfig = { ...botConfig, ...payload.new };
+        console.log('[SUPABASE_REALTIME] Initializing bot configuration sync...');
+
+        supabase.channel('bot-sync-global')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'bot_config' }, (payload) => {
+                console.log(`[SUPABASE_REALTIME] Bot Global Config ${payload.eventType}:`, payload.new || payload.old);
+                if (payload.eventType === 'DELETE') {
+                    // No deberíamos borrar la config global, pero si sucede volvemos a valores por defecto
+                    botConfig = { enabled: false, lobby_wait_seconds: 25 };
+                } else {
+                    botConfig = { ...botConfig, ...payload.new };
+                }
                 io.to('admins').emit('botConfigUpdated', botConfig);
             })
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bot_arena_config' }, (payload) => {
-                console.log('[SUPABASE_REALTIME] Arena bot config updated remotely:', payload.new);
-                const idx = botArenaConfigs.findIndex(c => c.mode === payload.new.mode && c.stake_tier === payload.new.stake_tier);
-                if (idx !== -1) botArenaConfigs[idx] = { ...botArenaConfigs[idx], ...payload.new };
-                else botArenaConfigs.push(payload.new);
+            .subscribe();
+
+        supabase.channel('bot-sync-arenas')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'bot_arena_config' }, (payload) => {
+                console.log(`[SUPABASE_REALTIME] Bot Arena Config ${payload.eventType}:`, payload.new || payload.old);
+                if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+                    const idx = botArenaConfigs.findIndex(c => c.mode === payload.new.mode && c.stake_tier === payload.new.stake_tier);
+                    if (idx !== -1) botArenaConfigs[idx] = { ...botArenaConfigs[idx], ...payload.new };
+                    else botArenaConfigs.push(payload.new);
+                } else if (payload.eventType === 'DELETE') {
+                    botArenaConfigs = botArenaConfigs.filter(c => c.id !== payload.old.id);
+                }
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'bot_arena_stats' }, (payload) => {
+                console.log(`[SUPABASE_REALTIME] Bot Arena Stats ${payload.eventType}:`, payload.new || payload.old);
+                if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+                    const idx = botArenaStats.findIndex(c => c.mode === payload.new.mode && c.stake_tier === payload.new.stake_tier);
+                    if (idx !== -1) botArenaStats[idx] = { ...botArenaStats[idx], ...payload.new };
+                    else botArenaStats.push(payload.new);
+                } else if (payload.eventType === 'DELETE') {
+                    botArenaStats = botArenaStats.filter(c => c.id !== payload.old.id);
+                }
             })
             .subscribe((status) => {
-                console.log(`[SUPABASE_REALTIME] Subscription status: ${status}`);
+                console.log(`[SUPABASE_REALTIME] Arena sync status: ${status}`);
             });
     };
     subscribeToBotConfig();
+
+    // FALLBACK: Periodic reload every 5 minutes in case Realtime fails
+    setInterval(() => {
+        console.log('[BOT_SYSTEM] Running periodic configuration sync fallback...');
+        loadBotConfig();
+    }, 5 * 60 * 1000);
 
     io.use(authMiddleware);
     process.io = io; // Expose io for Bold Webhook access
@@ -624,7 +653,7 @@ app.prepare().then(() => {
                 if (room.isBotGame && !room.botReplied) {
                     const botPlayer = room.players.find(p => p.isBot);
                     if (botPlayer) {
-                        botPlayer.choice = getBotChoice(room, botPlayer, botArenaStats);
+                        botPlayer.choice = getBotChoice(room, botPlayer, botArenaStats, botArenaConfigs);
                         room.botReplied = true; // Flag to prevent double choice in same round
                     }
                 }

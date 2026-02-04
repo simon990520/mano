@@ -33,12 +33,26 @@ function removeFromQueue(socketId, uId = null) {
     // Remove from Casual
     Object.values(waitingPlayers).forEach(queue => {
         const index = queue.findIndex(p => p.socketId === socketId || (uId && p.userId === uId));
-        if (index !== -1) queue.splice(index, 1);
+        if (index !== -1) {
+            const player = queue[index];
+            if (player.botTimer) {
+                clearTimeout(player.botTimer);
+                console.log(`[BOT_SYSTEM] Cleared pending bot timer for ${player.userId}`);
+            }
+            queue.splice(index, 1);
+        }
     });
     // Remove from Ranked
     Object.values(waitingRanked).forEach(queue => {
         const index = queue.findIndex(p => p.socketId === socketId || (uId && p.userId === uId));
-        if (index !== -1) queue.splice(index, 1);
+        if (index !== -1) {
+            const player = queue[index];
+            if (player.botTimer) {
+                clearTimeout(player.botTimer);
+                console.log(`[BOT_SYSTEM] Cleared pending bot timer for ${player.userId}`);
+            }
+            queue.splice(index, 1);
+        }
     });
 }
 
