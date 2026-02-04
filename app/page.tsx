@@ -19,6 +19,7 @@ import { GameOverModal } from '@/app/components/Modals/GameOverModal';
 import { PlayerStatsModal } from '@/app/components/Modals/PlayerStatsModal';
 import { ErrorModal } from '@/app/components/Modals/ErrorModal';
 import { SuccessModal } from '@/app/components/Modals/SuccessModal';
+import { WithdrawModal } from '@/app/components/Modals/WithdrawModal';
 
 export default function Home() {
     const { user, isSignedIn } = useUser();
@@ -59,7 +60,8 @@ export default function Home() {
         user,
         playSound,
         economyActions.checkProfile,
-        economyActions.handleGameOverUpdate // INJECTED: Handle economy updates from game results
+        economyActions.handleGameOverUpdate,
+        economyActions.checkBalanceForArena
     );
 
     // 5. Background Music Logic
@@ -303,6 +305,16 @@ export default function Home() {
                 />
             )}
 
+            {economyState.showWithdrawModal && (
+                <WithdrawModal
+                    type={economyState.withdrawType}
+                    currentBalance={economyState.withdrawType === 'coins' ? economyState.coins : economyState.gems}
+                    minWithdrawalCOP={economyState.minWithdrawal}
+                    onClose={() => economyActions.setShowWithdrawModal(false)}
+                    onConfirm={economyActions.handleConfirmWithdraw}
+                />
+            )}
+
             <ErrorModal
                 isOpen={gameData.errorModal.isOpen}
                 title={gameData.errorModal.title}
@@ -315,6 +327,8 @@ export default function Home() {
                 title={economyState.errorModal.title}
                 message={economyState.errorModal.message}
                 onClose={economyActions.closeError}
+                onAction={economyState.errorModal.onAction}
+                actionLabel={economyState.errorModal.actionLabel}
             />
 
             <SuccessModal

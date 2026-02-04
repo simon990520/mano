@@ -31,7 +31,7 @@ const adminIds = (process.env.ADMIN_USER_IDS || '').split(',').map(id => id.trim
 const isAdmin = (uId) => adminIds.includes(uId);
 
 // Security: Whitelist of allowed stakes
-const ALLOWED_STAKES = [10, 100, 500, 1000];
+const ALLOWED_STAKES = [10, 50, 100, 500, 1000];
 
 // Security: Daily reward cooldown cache (userId -> lastClaimTime)
 const dailyRewardCooldowns = new Map();
@@ -160,6 +160,9 @@ app.prepare().then(() => {
     io.on('connection', (socket) => {
         const userId = socket.userId;
         console.log('[SERVER_INFO] Player connected:', socket.id, 'User:', userId);
+
+        // Send public configuration upon connection (e.g. min_withdrawal_cop)
+        socket.emit('botConfigUpdated', botConfig);
 
         if (userSockets.has(userId)) {
             const oldSocketId = userSockets.get(userId);
@@ -371,18 +374,28 @@ app.prepare().then(() => {
 
         socket.on('updateBotConfig', async (data) => {
             if (!isAdmin(userId)) return socket.emit('adminError', 'No autorizado');
-            const { enabled, lobby_wait_seconds } = data;
-            console.log(`[ADMIN_ACTION] UpdateBotConfig: enabled=${enabled}, wait=${lobby_wait_seconds}s`);
+            const { enabled, lobby_wait_seconds, min_withdrawal_cop } = data;
+            console.log(`[ADMIN_ACTION] UpdateBotConfig: enabled=${enabled}, wait=${lobby_wait_seconds}s, min_withdraw=${min_withdrawal_cop} COP`);
             try {
-                const { error } = await supabase.from('bot_config')
-                    .update({ enabled, lobby_wait_seconds, updated_at: new Date().toISOString() })
-                    .eq('id', botConfig.id);
+                const configData = {
+                    enabled,
+                    lobby_wait_seconds,
+                    min_withdrawal_cop,
+                    updated_at: new Date().toISOString()
+                };
+
+                // Use upsert if no ID exists, otherwise update
+                const query = botConfig.id ?
+                    supabase.from('bot_config').update(configData).eq('id', botConfig.id) :
+                    supabase.from('bot_config').upsert({ ...configData, id: 'global_config' });
+
+                const { data: updated, error } = await query.select().single();
 
                 if (error) {
                     console.error('[ADMIN_ERROR] updateBotConfig:', error.message);
                     socket.emit('adminError', error.message);
                 } else {
-                    botConfig = { ...botConfig, enabled, lobby_wait_seconds }; // Update cache
+                    botConfig = updated || { ...botConfig, ...configData }; // Update cache
                     socket.emit('adminSuccess', 'Configuración del bot actualizada');
                     io.to('admins').emit('botConfigUpdated', botConfig);
                 }
@@ -394,11 +407,15 @@ app.prepare().then(() => {
 
         socket.on('updateArenaConfig', async (data) => {
             if (!isAdmin(userId)) return socket.emit('adminError', 'No autorizado');
-            const { mode, stake_tier, target_win_rate } = data;
-            console.log(`[ADMIN_ACTION] UpdateArenaConfig: ${mode}/${stake_tier} -> ${target_win_rate}%`);
+            const { mode, stake_tier, target_win_rate, is_random } = data;
+            console.log(`[ADMIN_ACTION] UpdateArenaConfig: ${mode}/${stake_tier} -> ${target_win_rate}%, random=${is_random}`);
             try {
                 const { error } = await supabase.from('bot_arena_config')
-                    .update({ target_win_rate, updated_at: new Date().toISOString() })
+                    .update({
+                        target_win_rate,
+                        is_random,
+                        updated_at: new Date().toISOString()
+                    })
                     .match({ mode, stake_tier });
 
                 if (error) {
@@ -409,6 +426,7 @@ app.prepare().then(() => {
                     const idx = botArenaConfigs.findIndex(c => c.mode === mode && c.stake_tier === stake_tier);
                     if (idx !== -1) {
                         botArenaConfigs[idx].target_win_rate = target_win_rate;
+                        botArenaConfigs[idx].is_random = is_random;
                     }
                     socket.emit('adminSuccess', `Arena ${mode}/${stake_tier} actualizada`);
                 }

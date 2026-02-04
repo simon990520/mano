@@ -18,12 +18,15 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
     // Shop visibility helpers (UI state)
     const [showCoinShop, setShowCoinShop] = useState<boolean>(false);
     const [showGemShop, setShowGemShop] = useState<boolean>(false);
+    const [showWithdrawModal, setShowWithdrawModal] = useState<boolean>(false);
+    const [withdrawType, setWithdrawType] = useState<'coins' | 'gems'>('coins');
+    const [minWithdrawal, setMinWithdrawal] = useState<number>(10000);
 
     const [currentStreak, setCurrentStreak] = useState<number>(0);
     const [lastClaimedAt, setLastClaimedAt] = useState<string | null>(null);
 
     // Global Error/Success States (Economy/General)
-    const [errorModal, setErrorModal] = useState<{ isOpen: boolean, title: string, message: string }>({
+    const [errorModal, setErrorModal] = useState<{ isOpen: boolean, title: string, message: string, onAction?: () => void, actionLabel?: string }>({
         isOpen: false,
         title: '',
         message: ''
@@ -149,12 +152,20 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             checkProfile(); // Update balances
         };
 
+        const onConfigUpdated = (config: any) => {
+            if (config?.min_withdrawal_cop !== undefined) {
+                console.log('[ECONOMY] Dynamic min withdrawal updated:', config.min_withdrawal_cop);
+                setMinWithdrawal(config.min_withdrawal_cop);
+            }
+        };
+
         socket.on('purchaseSuccess', onPurchaseSuccess);
         socket.on('rewardClaimed', onRewardClaimed);
         socket.on('purchaseError', onPurchaseError);
         socket.on('profileUpdated', onProfileUpdated);
         socket.on('profileUpdateError', onProfileUpdateError);
         socket.on('roomRefunded', onRoomRefunded);
+        socket.on('botConfigUpdated', onConfigUpdated);
 
         return () => {
             socket.off('purchaseSuccess', onPurchaseSuccess);
@@ -163,6 +174,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             socket.off('profileUpdated', onProfileUpdated);
             socket.off('profileUpdateError', onProfileUpdateError);
             socket.off('roomRefunded', onRoomRefunded);
+            socket.off('botConfigUpdated', onConfigUpdated);
         };
     }, [socket]);
 
@@ -220,25 +232,61 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
     };
 
     const handleWithdraw = async (type: 'coins' | 'gems') => {
-        console.log('[ECONOMY] handleWithdraw called for:', type);
+        console.log('[ECONOMY] handleWithdraw triggered for:', type);
+        if (!isSignedIn || !user) return;
+        setWithdrawType(type);
+        setShowWithdrawModal(true);
+        playSound('/sounds/sfx/click.mp3');
+    };
 
+    const handleConfirmWithdraw = async (amount: number) => {
         if (!isSignedIn || !user) return;
 
-        // 1. Get accurate username from DB or generic fallback
+        // 1. Get accurate username
         let finalUsername = username;
         if (!finalUsername || finalUsername === user?.username) {
-            console.log('[ECONOMY] State username empty or matches Clerk, fetching strictly from DB...');
             const { data } = await supabase.from('profiles').select('username').eq('id', user.id).single();
             finalUsername = data?.username || 'Jugador';
         }
 
-        console.log('[ECONOMY] Opening WhatsApp for withdrawal...');
-        playSound('/sounds/sfx/click.mp3');
+        const rate = withdrawType === 'coins' ? 10 : 100;
+        const copValue = Math.floor(amount * rate);
+        const itemType = withdrawType === 'coins' ? 'monedas' : 'gemas';
+
+        console.log(`[ECONOMY] Processing withdrawal: ${amount} ${itemType} (${copValue} COP)`);
+
         const phoneNumber = '573146959639';
-        const itemType = type === 'coins' ? 'monedas' : 'gemas';
-        const message = `Hola soy ${finalUsername} y deseo retirar ${itemType}`;
+        const message = `Hola soy ${finalUsername} y deseo retirar ${amount} ${itemType} (Equivalente a $${copValue.toLocaleString('es-CO')} COP)`;
         const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+
+        playSound('/sounds/sfx/click.mp3');
         window.open(whatsappUrl, '_blank');
+        setShowWithdrawModal(false);
+    };
+
+    /**
+     * Revisa si el usuario tiene saldo para una arena. 
+     * Si no tiene, abre la modal de error con opción de ir a la tienda.
+     */
+    const checkBalanceForArena = (required: number, type: 'casual' | 'ranked') => {
+        const itemType = type === 'casual' ? 'coins' : 'gems';
+        const balance = type === 'casual' ? coins : gems;
+
+        if (balance < required) {
+            setErrorModal({
+                isOpen: true,
+                title: 'SALDO INSUFICIENTE',
+                message: `No tienes suficientes ${itemType === 'coins' ? 'monedas' : 'gemas'} para esta arena. ¿Deseas recargar?`,
+                onAction: () => {
+                    setErrorModal(prev => ({ ...prev, isOpen: false }));
+                    if (itemType === 'coins') setShowCoinShop(true);
+                    else setShowGemShop(true);
+                },
+                actionLabel: 'IR A LA TIENDA'
+            });
+            return false;
+        }
+        return true;
     };
 
     const handleSaveProfile = () => {
@@ -271,6 +319,9 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             rankName,
             showCoinShop,
             showGemShop,
+            showWithdrawModal,
+            withdrawType,
+            minWithdrawal,
             showOnboarding,
             username,
             birthDate,
@@ -286,15 +337,18 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             setRankName,
             setShowCoinShop,
             setShowGemShop,
+            setShowWithdrawModal,
             setShowOnboarding,
             setUsername,
             setBirthDate,
             handlePurchase,
             handleClaimDaily,
             handleWithdraw,
+            handleConfirmWithdraw,
             handleSaveProfile,
             checkProfile,
             handleGameOverUpdate,
+            checkBalanceForArena,
             closeError: () => setErrorModal(prev => ({ ...prev, isOpen: false })),
             closeSuccess: () => setSuccessModal(prev => ({ ...prev, isOpen: false }))
         }

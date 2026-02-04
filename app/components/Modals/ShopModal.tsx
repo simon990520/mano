@@ -50,7 +50,7 @@ export const ShopModal: React.FC<ShopModalProps> = ({ type, onClose, onPurchase,
                             100: isCoins ? 1000 : 10000,
                             250: isCoins ? 2500 : 25000,
                             500: isCoins ? 5000 : 50000,
-                            1000: isCoins ? 10000 : 1000000
+                            1000: isCoins ? 10000 : 100000
                         };
                         const price = prices[amount];
 

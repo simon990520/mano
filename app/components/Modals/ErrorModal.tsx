@@ -6,9 +6,11 @@ interface ErrorModalProps {
     title: string;
     message: string;
     onClose: () => void;
+    onAction?: () => void;
+    actionLabel?: string;
 }
 
-export const ErrorModal: React.FC<ErrorModalProps> = ({ isOpen, title, message, onClose }) => {
+export const ErrorModal: React.FC<ErrorModalProps> = ({ isOpen, title, message, onClose, onAction, actionLabel }) => {
     return (
         <AnimatePresence>
             {isOpen && (
@@ -44,19 +46,35 @@ export const ErrorModal: React.FC<ErrorModalProps> = ({ isOpen, title, message, 
                         <div style={{
                             padding: '20px',
                             display: 'flex',
-                            justifyContent: 'center'
+                            flexDirection: 'column',
+                            gap: '12px',
+                            alignItems: 'center'
                         }}>
+                            {onAction && actionLabel && (
+                                <button
+                                    className="game-action-btn active"
+                                    onClick={onAction}
+                                    style={{
+                                        width: '100%',
+                                        maxWidth: '200px',
+                                        background: 'linear-gradient(135deg, #00ff88 0%, #009955 100%)',
+                                        boxShadow: '0 8px 16px rgba(0, 255, 136, 0.2)'
+                                    }}
+                                >
+                                    {actionLabel}
+                                </button>
+                            )}
                             <button
-                                className="game-action-btn active"
+                                className="game-action-btn inactive"
                                 onClick={onClose}
                                 style={{
                                     width: '100%',
                                     maxWidth: '200px',
-                                    background: 'linear-gradient(135deg, #ff4466 0%, #cc0033 100%)',
-                                    boxShadow: '0 8px 16px rgba(255, 68, 102, 0.3)'
+                                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                                    background: 'transparent'
                                 }}
                             >
-                                ENTENDIDO
+                                {onAction ? 'CANCELAR' : 'ENTENDIDO'}
                             </button>
                         </div>
                     </motion.div>

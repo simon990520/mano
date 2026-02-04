@@ -8,7 +8,8 @@ export const useGameController = (
     user: any,
     playSound: (path: string) => void,
     checkProfile: () => void,
-    onGameOverUpdate: (data: GameOverData) => void
+    onGameOverUpdate: (data: GameOverData) => void,
+    checkBalanceForArena: (amount: number, mode: 'casual' | 'ranked') => boolean
 ) => {
     // Game State
     const [gameState, setGameState] = useState<GameState>('lobby');
@@ -407,6 +408,10 @@ export const useGameController = (
     // Action Handlers
     const handleFindMatch = () => {
         if (!isSignedIn || !socket || !socket.connected) return;
+
+        // Check balance before finding match
+        if (!checkBalanceForArena(selectedStake, gameMode)) return;
+
         socket.emit('findMatch', {
             imageUrl: user?.imageUrl,
             mode: gameMode,
@@ -489,11 +494,17 @@ export const useGameController = (
         setRematchStatus('');
 
         // SECURITY/PERSISTENCE: Use the stake from the match just ended
+        const nextStake = currentMatchStake || selectedStake;
+        if (!checkBalanceForArena(nextStake, gameMode)) {
+            setGameState('lobby'); // Return to lobby if they can't afford play again
+            return;
+        }
+
         if (socket && socket.connected) {
             socket.emit('findMatch', {
                 imageUrl: user?.imageUrl,
                 mode: gameMode,
-                stakeTier: currentMatchStake || selectedStake
+                stakeTier: nextStake
             });
         }
     };
