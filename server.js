@@ -166,8 +166,13 @@ app.prepare().then(() => {
 
         if (userSockets.has(userId)) {
             const oldSocketId = userSockets.get(userId);
-            io.sockets.sockets.get(oldSocketId)?.disconnect();
-            console.log('Multiple tabs detected. Disconnected old session for:', userId);
+            const oldSocket = io.sockets.sockets.get(oldSocketId);
+            if (oldSocket) {
+                console.log(`[SESSION_SECURITY] Disconnecting old session for ${userId}. New session: ${socket.id}, Old: ${oldSocketId}`);
+                oldSocket.disconnect();
+            } else {
+                console.log(`[SESSION_SECURITY] Old socket ID ${oldSocketId} found for ${userId} but it's already stale.`);
+            }
         }
         userSockets.set(userId, socket.id);
 
