@@ -1847,3 +1847,82 @@ body {
     filter: brightness(1);
   }
 }
+
+/* Media Queries para dispositivos con altura limitada */
+@media (max-height: 700px) {
+  .leaderboard-card.shop-card {
+    padding: 20px;
+  }
+  
+  .shop-grid {
+    padding: 15px;
+    gap: 12px;
+  }
+  
+  .shop-item-btn {
+    padding: 12px 10px;
+  }
+  
+  .shop-item-icon {
+    font-size: 1.5rem;
+  }
+  
+  .shop-item-amount {
+    font-size: 1.2rem;
+  }
+  
+  .leaderboard-header {
+    margin-bottom: 15px;
+  }
+  
+  .leaderboard-logo {
+    font-size: 2.5rem;
+    margin-bottom: 8px;
+  }
+  
+  .leaderboard-title {
+    font-size: 1.8rem;
+  }
+}
+
+@media (max-height: 600px) {
+  .leaderboard-card.shop-card {
+    padding: 15px;
+  }
+  
+  .shop-grid {
+    padding: 10px;
+    gap: 10px;
+  }
+  
+  .shop-item-btn {
+    padding: 10px 8px;
+    gap: 6px;
+  }
+  
+  .shop-item-icon {
+    font-size: 1.3rem;
+  }
+  
+  .shop-item-amount {
+    font-size: 1rem;
+  }
+  
+  .shop-item-price {
+    font-size: 0.7rem;
+    padding: 3px 10px;
+  }
+  
+  .leaderboard-header {
+    margin-bottom: 10px;
+  }
+  
+  .leaderboard-logo {
+    font-size: 2rem;
+    margin-bottom: 5px;
+  }
+  
+  .leaderboard-title {
+    font-size: 1.5rem;
+  }
+}

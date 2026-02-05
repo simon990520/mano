@@ -205,7 +205,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
         }
 
         // WHATSAPP REDIRECTION
-        const phoneNumber = '573146959639';
+        const phoneNumber = '573506049629';
         const itemType = type === 'coins' ? 'monedas' : 'gemas';
         const message = `Hola soy ${finalUsername} deseo comprar ${amount} ${itemType}`;
         const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
@@ -255,7 +255,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
 
         console.log(`[ECONOMY] Processing withdrawal: ${amount} ${itemType} (${copValue} COP)`);
 
-        const phoneNumber = '573146959639';
+        const phoneNumber = '573506049629';
         const message = `Hola soy ${finalUsername} y deseo retirar ${amount} ${itemType} (Equivalente a $${copValue.toLocaleString('es-CO')} COP)`;
         const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
 

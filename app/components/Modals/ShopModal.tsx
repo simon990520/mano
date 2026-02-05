@@ -26,7 +26,13 @@ export const ShopModal: React.FC<ShopModalProps> = ({ type, onClose, onPurchase,
 
     return (
         <div className="leaderboard-overlay" style={{ zIndex: isCoins ? 10002 : 10003 }}>
-            <div className="leaderboard-card shop-card" style={{ maxWidth: '400px' }}>
+            <div className="leaderboard-card shop-card" style={{
+                maxWidth: '400px',
+                maxHeight: '90vh',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column'
+            }}>
                 <div className="leaderboard-header">
                     <div className="leaderboard-logo">{icon}</div>
                     <h2
@@ -41,60 +47,65 @@ export const ShopModal: React.FC<ShopModalProps> = ({ type, onClose, onPurchase,
                     </h2>
                     <button className="close-btn" onClick={onClose}>×</button>
                 </div>
-                <div className="shop-grid">
-                    {amounts.map((amount) => {
-                        const isDailyStreak = type === 'coins' && amount === 10;
-                        const prices: { [key: number]: number } = {
-                            10: isDailyStreak ? 0 : (isCoins ? 100 : 1000),
-                            50: isCoins ? 500 : 5000,
-                            100: isCoins ? 1000 : 10000,
-                            250: isCoins ? 2500 : 25000,
-                            500: isCoins ? 5000 : 50000,
-                            1000: isCoins ? 10000 : 100000
-                        };
-                        const price = prices[amount];
+                <div style={{
+                    overflowY: 'auto',
+                    flex: 1
+                }}>
+                    <div className="shop-grid">
+                        {amounts.map((amount) => {
+                            const isDailyStreak = type === 'coins' && amount === 10;
+                            const prices: { [key: number]: number } = {
+                                10: isDailyStreak ? 0 : (isCoins ? 100 : 1000),
+                                50: isCoins ? 500 : 5000,
+                                100: isCoins ? 1000 : 10000,
+                                250: isCoins ? 2500 : 25000,
+                                500: isCoins ? 5000 : 50000,
+                                1000: isCoins ? 10000 : 100000
+                            };
+                            const price = prices[amount];
 
-                        let priceText = `$${price.toLocaleString('es-CO')}`;
-                        if (isDailyStreak) {
-                            priceText = claimed ? 'MAÑANA' : `RACHA (Día ${currentStreak + 1}/7)`;
-                        }
+                            let priceText = `$${price.toLocaleString('es-CO')}`;
+                            if (isDailyStreak) {
+                                priceText = claimed ? 'MAÑANA' : `RACHA (Día ${currentStreak + 1}/7)`;
+                            }
 
-                        // Determine rewards for streak
-                        const displayedAmount = isDailyStreak ? (currentStreak + 1) * 10 : amount;
+                            // Determine rewards for streak
+                            const displayedAmount = isDailyStreak ? (currentStreak + 1) * 10 : amount;
 
-                        return (
-                            <button
-                                key={amount}
-                                className={`shop-item-btn ${type} ${isDailyStreak ? 'rewarded-btn' : ''}`}
-                                onClick={() => onPurchase(type, amount)}
-                                disabled={isDailyStreak && claimed}
-                                style={isDailyStreak ? {
-                                    border: claimed ? '2px solid #555' : '2px solid #ffd700',
-                                    background: claimed ? 'rgba(85,85,85,0.2)' : 'linear-gradient(45deg, #ff6b6b, #fca5a5)',
-                                    opacity: claimed ? 0.6 : 1,
-                                    cursor: claimed ? 'not-allowed' : 'pointer'
-                                } : undefined}
-                            >
-                                <span className="shop-item-icon">{icon}</span>
-                                <span className="shop-item-amount">+{displayedAmount}</span>
-                                <span className="shop-item-price">
-                                    {priceText}
-                                </span>
-                            </button>
-                        );
-                    })}
-                </div>
-                {onWithdraw && (
-                    <div style={{ marginTop: '20px', textAlign: 'center' }}>
-                        <button
-                            className="btn-secondary"
-                            style={{ width: '100%', padding: '15px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
-                            onClick={() => onWithdraw(type)}
-                        >
-                            📲 RETIRAR A NEQUI
-                        </button>
+                            return (
+                                <button
+                                    key={amount}
+                                    className={`shop-item-btn ${type} ${isDailyStreak ? 'rewarded-btn' : ''}`}
+                                    onClick={() => onPurchase(type, amount)}
+                                    disabled={isDailyStreak && claimed}
+                                    style={isDailyStreak ? {
+                                        border: claimed ? '2px solid #555' : '2px solid #ffd700',
+                                        background: claimed ? 'rgba(85,85,85,0.2)' : 'linear-gradient(45deg, #ff6b6b, #fca5a5)',
+                                        opacity: claimed ? 0.6 : 1,
+                                        cursor: claimed ? 'not-allowed' : 'pointer'
+                                    } : undefined}
+                                >
+                                    <span className="shop-item-icon">{icon}</span>
+                                    <span className="shop-item-amount">+{displayedAmount}</span>
+                                    <span className="shop-item-price">
+                                        {priceText}
+                                    </span>
+                                </button>
+                            );
+                        })}
                     </div>
-                )}
+                    {onWithdraw && (
+                        <div style={{ padding: '0 20px 20px 20px', textAlign: 'center' }}>
+                            <button
+                                className="btn-secondary"
+                                style={{ width: '100%', padding: '15px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+                                onClick={() => onWithdraw(type)}
+                            >
+                                📲 RETIRAR A NEQUI
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

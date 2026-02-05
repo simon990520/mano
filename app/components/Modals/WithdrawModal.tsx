@@ -21,19 +21,30 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ type, onClose, onC
 
     return (
         <div className="leaderboard-overlay" style={{ zIndex: 11000 }}>
-            <div className="leaderboard-card shop-card" style={{ maxWidth: '400px' }}>
+            <div className="leaderboard-card shop-card" style={{
+                maxWidth: '400px',
+                maxHeight: '90vh',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column'
+            }}>
                 <div className="leaderboard-header">
                     <div className="leaderboard-logo">{isCoins ? '🪙' : '💎'}</div>
                     <h2 className="leaderboard-title" style={{ fontSize: '1.2rem' }}>RETIRAR {type.toUpperCase()}</h2>
                     <button className="close-btn" onClick={onClose}>×</button>
                 </div>
 
-                <div style={{ padding: '30px', textAlign: 'center' }}>
-                    <p style={{ marginBottom: '15px', fontSize: '0.9rem', opacity: 0.9 }}>
+                <div style={{
+                    padding: '20px',
+                    textAlign: 'center',
+                    overflowY: 'auto',
+                    flex: 1
+                }}>
+                    <p style={{ marginBottom: '12px', fontSize: '0.85rem', opacity: 0.9 }}>
                         Saldo disponible: <span style={{ fontWeight: 800, color: isCoins ? '#ffd700' : '#47efff' }}>{currentBalance.toLocaleString()} {isCoins ? '🪙' : '💎'}</span>
                     </p>
 
-                    <div style={{ marginBottom: '25px', position: 'relative' }}>
+                    <div style={{ marginBottom: '20px', position: 'relative' }}>
                         <input
                             type="number"
                             value={amount}
@@ -42,8 +53,8 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ type, onClose, onC
                             className="onboarding-input"
                             style={{
                                 textAlign: 'center',
-                                fontSize: '2rem',
-                                padding: '15px',
+                                fontSize: '1.8rem',
+                                padding: '12px',
                                 background: 'rgba(0,0,0,0.3)',
                                 border: '2px solid rgba(255,255,255,0.1)',
                                 width: '100%',
@@ -54,11 +65,12 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ type, onClose, onC
                         />
                         <div style={{
                             position: 'absolute',
-                            right: '20px',
+                            right: '15px',
                             top: '50%',
                             transform: 'translateY(-50%)',
                             opacity: 0.5,
                             fontWeight: 800,
+                            fontSize: '0.9rem',
                             pointerEvents: 'none'
                         }}>
                             {type.toUpperCase()}
@@ -66,15 +78,15 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ type, onClose, onC
                     </div>
 
                     <div style={{
-                        padding: '20px',
+                        padding: '15px',
                         background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
-                        borderRadius: '20px',
+                        borderRadius: '15px',
                         border: '1px solid rgba(255,255,255,0.1)',
-                        marginBottom: '30px'
+                        marginBottom: '20px'
                     }}>
-                        <p style={{ fontSize: '0.75rem', marginBottom: '8px', opacity: 0.6, letterSpacing: '1px', textTransform: 'uppercase' }}>Recibirás en COP aprox:</p>
+                        <p style={{ fontSize: '0.7rem', marginBottom: '6px', opacity: 0.6, letterSpacing: '1px', textTransform: 'uppercase' }}>Recibirás en COP aprox:</p>
                         <p style={{
-                            fontSize: '2rem',
+                            fontSize: '1.5rem',
                             fontWeight: 900,
                             color: canWithdraw ? '#00ff88' : 'rgba(255,255,255,0.2)',
                             textShadow: canWithdraw ? '0 0 20px rgba(0,255,136,0.3)' : 'none',
@@ -84,11 +96,13 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ type, onClose, onC
                         </p>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         <button
                             className="btn-primary"
                             style={{
                                 width: '100%',
+                                padding: '14px',
+                                fontSize: '1rem',
                                 opacity: canWithdraw ? 1 : 0.4,
                                 cursor: canWithdraw ? 'pointer' : 'not-allowed',
                                 transform: canWithdraw ? 'scale(1)' : 'scale(0.98)',
@@ -101,7 +115,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({ type, onClose, onC
                         </button>
 
                         <p style={{
-                            fontSize: '0.75rem',
+                            fontSize: '0.7rem',
                             opacity: 0.7,
                             color: numericAmount > 0 && numericAmount < minAmount ? '#ff4466' : 'inherit'
                         }}>

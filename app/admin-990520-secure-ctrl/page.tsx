@@ -561,7 +561,7 @@ export default function AdminDashboard() {
                     </nav>
 
                     <div style={{ padding: '24px', borderTop: `1px solid ${colors.cardBorder}`, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <a href="https://wa.me/3215269389" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '18px', borderRadius: '24px', backgroundColor: '#10b981', color: 'white', textDecoration: 'none', fontWeight: 900, textAlign: 'center', justifyContent: 'center' }}>💬 CANAL CAJEROS</a>
+                        <a href="https://wa.me/573506049629" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '18px', borderRadius: '24px', backgroundColor: '#10b981', color: 'white', textDecoration: 'none', fontWeight: 900, textAlign: 'center', justifyContent: 'center' }}>💬 CANAL CAJEROS</a>
                         <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} style={{ padding: '16px', borderRadius: '24px', border: `2px solid ${colors.cardBorder}`, background: 'none', color: colors.textMain, fontWeight: 900, cursor: 'pointer' }}>{theme === 'dark' ? '☀️ CLARO' : '🌙 OSCURO'}</button>
                     </div>
                 </aside>
