@@ -197,10 +197,10 @@ app.prepare().then(() => {
                     }
                 }
 
-                // Fetch existing profile to check columns
+                // Fetch existing profile to check columns (include streak data)
                 const { data: existing } = await supabase
                     .from('profiles')
-                    .select('id, username, birth_date, coins, gems')
+                    .select('id, username, birth_date, coins, gems, current_streak, last_claimed_at')
                     .eq('id', userId)
                     .maybeSingle();
 
@@ -218,6 +218,8 @@ app.prepare().then(() => {
 
                 let finalCoins = (existing?.coins || 0);
                 let finalGems = (existing?.gems || 0);
+                let currentStreak = existing?.current_streak || 0;
+                let lastClaimedAt = existing?.last_claimed_at || null;
 
                 if (isNewOnboarding) {
                     bonusClaimLock.add(userId); // LOCK
@@ -233,6 +235,8 @@ app.prepare().then(() => {
                         birth_date: birthDate,
                         coins: finalCoins,
                         gems: finalGems,
+                        current_streak: currentStreak,
+                        last_claimed_at: lastClaimedAt,
                         updated_at: new Date().toISOString()
                     });
 
@@ -319,12 +323,12 @@ app.prepare().then(() => {
 
                     const { error: updateError } = await supabase
                         .from('profiles')
-                        .upsert({
-                            id: userId,
+                        .update({
                             coins: newCoins,
                             last_claimed_at: claimedAt,
                             current_streak: newStreak
-                        });
+                        })
+                        .eq('id', userId);
 
                     if (updateError) {
                         socket.emit('purchaseError', 'Error al reclamar: ' + updateError.message);
@@ -508,10 +512,10 @@ app.prepare().then(() => {
 
                 const { error: updateError } = await supabase
                     .from('profiles')
-                    .upsert({
-                        id: userId,
+                    .update({
                         [type]: newValue
-                    });
+                    })
+                    .eq('id', userId);
 
                 if (updateError) {
                     socket.emit('purchaseError', updateError.message);
