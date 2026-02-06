@@ -46,8 +46,12 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             .eq('id', user.id)
             .single();
 
+        // If profile is COMPLETE, explicitly hide onboarding
+        if (data && data.username && data.birth_date) {
+            setShowOnboarding(false);
+        }
         // If profile missing or incomplete (no username or birth_date)
-        if (error || !data || !data.username || !data.birth_date) {
+        else if (error || !data || !data.username || !data.birth_date) {
             setShowOnboarding(true);
             if (data?.username) setUsername(data.username);
         }
