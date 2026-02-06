@@ -40,18 +40,34 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
 
     const checkProfile = async () => {
         if (!isSignedIn || !user) return;
+
+        console.log('[ONBOARDING_DEBUG] Starting checkProfile for user:', user.id);
+
         const { data, error } = await supabase
             .from('profiles')
             .select('id, username, birth_date, coins, gems, rp, rank_name, current_streak, last_claimed_at')
             .eq('id', user.id)
             .single();
 
+        console.log('[ONBOARDING_DEBUG] Query result:', {
+            hasError: !!error,
+            errorMessage: error?.message,
+            hasData: !!data,
+            username: data?.username,
+            birth_date: data?.birth_date,
+            fullData: data
+        });
+
         // If profile is COMPLETE, explicitly hide onboarding
         if (data && data.username && data.birth_date) {
+            console.log('[ONBOARDING_DEBUG] Profile is COMPLETE. Setting showOnboarding = FALSE');
             setShowOnboarding(false);
         }
         // If profile missing or incomplete (no username or birth_date)
         else if (error || !data || !data.username || !data.birth_date) {
+            console.log('[ONBOARDING_DEBUG] Profile INCOMPLETE. Setting showOnboarding = TRUE', {
+                reason: error ? 'error' : !data ? 'no data' : !data.username ? 'no username' : 'no birth_date'
+            });
             setShowOnboarding(true);
             if (data?.username) setUsername(data.username);
         }
