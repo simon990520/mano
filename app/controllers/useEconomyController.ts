@@ -58,15 +58,21 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             fullData: data
         });
 
+        // NETWORK ERROR: Don't show onboarding modal for connection issues
+        if (error && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+            console.warn('[ONBOARDING_DEBUG] Network error detected. Skipping onboarding check.', error.message);
+            return; // Don't change showOnboarding state on network errors
+        }
+
         // If profile is COMPLETE, explicitly hide onboarding
         if (data && data.username && data.birth_date) {
             console.log('[ONBOARDING_DEBUG] Profile is COMPLETE. Setting showOnboarding = FALSE');
             setShowOnboarding(false);
         }
-        // If profile missing or incomplete (no username or birth_date)
-        else if (error || !data || !data.username || !data.birth_date) {
+        // If profile missing or incomplete (no username or birth_date) - but NOT a network error
+        else if (!data || !data.username || !data.birth_date) {
             console.log('[ONBOARDING_DEBUG] Profile INCOMPLETE. Setting showOnboarding = TRUE', {
-                reason: error ? 'error' : !data ? 'no data' : !data.username ? 'no username' : 'no birth_date'
+                reason: !data ? 'no data' : !data.username ? 'no username' : 'no birth_date'
             });
             setShowOnboarding(true);
             if (data?.username) setUsername(data.username);
