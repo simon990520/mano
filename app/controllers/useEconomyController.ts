@@ -105,32 +105,39 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             console.log(`[ECONOMY] Purchase confirmed by server: ${type} = ${newValue}`);
         };
 
-        const onRewardClaimed = ({ newCoins, streak, claimedAt }: { newCoins: number, streak: number, claimedAt: string }) => {
+        const onRewardClaimed = (data: { streak: number; newCoins: number; currentStreak?: number, claimedAt: string }) => {
+            const { streak, newCoins, currentStreak, claimedAt } = data;
+
             setCoins(newCoins);
-            setCurrentStreak(streak);
-            setLastClaimedAt(claimedAt);
+            // Update streak with the server's value if provided, otherwise fallback to existing streak logic
+            if (currentStreak !== undefined) {
+                setCurrentStreak(currentStreak);
+            } else {
+                setCurrentStreak(streak); // Fallback to 'streak' if 'currentStreak' is not provided
+            }
+            setLastClaimedAt(claimedAt); // Keep setting claimedAt
             playSound('/sounds/sfx/win_round.mp3');
 
-            // RACHA SUCCESS CONFETTI
+            // Confetti effect
             confetti({
                 particleCount: 150,
                 spread: 70,
                 origin: { y: 0.6 },
-                colors: ['#ffd700', '#ffffff', '#ff6b6b'],
+                colors: ['#FFD700', '#FFA500', '#ffffff'],
                 zIndex: 30000
             });
 
             // CLOSE SHOP AUTOMATICALLY
             setShowCoinShop(false);
 
-            console.log(`[ECONOMY] Daily reward claimed! Streak: ${streak}, New Coins: ${newCoins}`);
+            console.log(`[ECONOMY] Daily reward claimed! Streak: ${currentStreak ?? streak}, New Coins: ${newCoins}`);
 
             // GTM Analytics
             if (typeof window !== 'undefined' && (window as any).dataLayer) {
                 (window as any).dataLayer.push({
                     event: 'daily_reward_claim_success',
-                    streak: streak,
-                    rewardAmount: streak * 10
+                    streak: currentStreak ?? streak,
+                    rewardAmount: (currentStreak ?? streak) * 10
                 });
             }
         };

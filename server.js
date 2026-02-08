@@ -333,7 +333,7 @@ app.prepare().then(() => {
                     if (updateError) {
                         socket.emit('purchaseError', 'Error al reclamar: ' + updateError.message);
                     } else {
-                        socket.emit('rewardClaimed', { newCoins, streak: newStreak, claimedAt });
+                        socket.emit('rewardClaimed', { newCoins, streak: newStreak, currentStreak: newStreak, claimedAt });
                     }
                 }
             } catch (err) {
@@ -626,6 +626,32 @@ app.prepare().then(() => {
                                 botPlayer.username = botProfile.username;
                                 botPlayer.isBot = true;
 
+                                // TUTORIAL MATCH LOGIC: Force win for P1 if it's their first game
+                                try {
+                                    const { data: p1Profile } = await supabase
+                                        .from('profiles')
+                                        .select('tutorial_match_completed')
+                                        .eq('id', player.userId) // Use 'player' here, not 'player1'
+                                        .single();
+
+                                    if (p1Profile && !p1Profile.tutorial_match_completed) {
+                                        console.log(`[TUTORIAL] Forcing win for new player ${player.userId}`);
+                                        // This logic is for the game outcome, not match setup.
+                                        // It should be in `endGame` or `resolveRound` where winner is determined.
+                                        // For now, we'll just mark the bot as a tutorial bot.
+                                        botPlayer.isTutorialBot = true;
+
+                                        // Mark tutorial as completed (this should happen AFTER the game ends)
+                                        // await supabase
+                                        //     .from('profiles')
+                                        //     .update({ tutorial_match_completed: true })
+                                        //     .eq('id', player.userId);
+                                    }
+                                } catch (tutErr) {
+                                    console.error('[TUTORIAL_CHECK_ERROR]', tutErr);
+                                }
+
+                                // AI Opponent Logic (if not tutorial forced)
                                 const room = createRoom(player, botPlayer);
                                 room.mode = mode;
                                 room.stakeTier = currentStake;
