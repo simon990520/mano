@@ -2,8 +2,50 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-    title: 'Rock Paper Scissors - Multiplayer',
-    description: 'Real-time multiplayer rock paper scissors game',
+    metadataBase: new URL('https://piedrapapel.com'),
+    title: {
+        default: 'Piedra Papel o Tijera - Gana Dinero Real a Nequi',
+        template: '%s | Piedra Papel o Tijera'
+    },
+    description: 'Juega Piedra, Papel o Tijera online y gana dinero real transferido a Nequi. Participa en torneos, sube de rango y diviértete ganando. ¡Entra ya!',
+    keywords: ['piedra papel', 'ganar dinero a nequi', 'ganar jugando annequi', 'cómo ganar dinero a nequi', 'juegos de habilidad', 'rock paper scissors', 'jugar online', 'dinero real', 'nequi'],
+    authors: [{ name: 'Moddio' }],
+    creator: 'Moddio',
+    publisher: 'Moddio',
+    robots: {
+        index: true,
+        follow: true,
+        googleBot: {
+            index: true,
+            follow: true,
+            'max-video-preview': -1,
+            'max-image-preview': 'large',
+            'max-snippet': -1,
+        },
+    },
+    openGraph: {
+        type: 'website',
+        locale: 'es_CO',
+        url: 'https://piedrapapel.com',
+        title: 'Piedra Papel o Tijera - Gana Dinero Real a Nequi',
+        description: 'Demuestra tu habilidad en Piedra, Papel o Tijera y gana premios en efectivo directo a tu Nequi. ¡Juega ahora!',
+        siteName: 'Piedra Papel o Tijera',
+        images: [
+            {
+                url: '/logo.jpg',
+                width: 800,
+                height: 600,
+                alt: 'Logo Piedra Papel o Tijera',
+            },
+        ],
+    },
+    twitter: {
+        card: 'summary_large_image',
+        title: 'Piedra Papel o Tijera - Gana Dinero Real a Nequi',
+        description: 'Juega y gana dinero real en Nequi. Torneos diarios y premios en efectivo.',
+        images: ['/logo.jpg'],
+        creator: '@Moddio',
+    },
     icons: {
         icon: '/logo.jpg',
         apple: '/logo.jpg',
