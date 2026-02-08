@@ -554,6 +554,7 @@ app.prepare().then(() => {
                     if (profile.gems < currentStake) return socket.emit('matchError', `Necesitas ${currentStake} gemas.`);
                 }
 
+                // Matchmaking
                 if (activeRooms.has(socket.id)) {
                     const room = activeRooms.get(socket.id);
                     if (room.state === 'gameOver') {
@@ -564,6 +565,60 @@ app.prepare().then(() => {
                         }
                         activeRooms.delete(socket.id);
                     }
+                }
+
+                // CHECK TUTORIAL STATUS
+                const { data: tutorialProfile } = await supabase
+                    .from('profiles')
+                    .select('tutorial_match_completed')
+                    .eq('id', userId)
+                    .single();
+
+                // FORCE INSTANT BOT MATCH FOR TUTORIAL
+                if (tutorialProfile && !tutorialProfile.tutorial_match_completed) {
+                    console.log(`[TUTORIAL] Instant bot match for new player ${userId}`);
+
+                    const player = createPlayer(socket.id, userId, imageUrl);
+                    player.mode = mode;
+                    player.stakeTier = currentStake;
+                    player.rank = currentRank;
+
+                    const botProfile = createBotProfile();
+                    const botPlayer = createPlayer('BOT_' + Date.now(), botProfile.id, null);
+                    botPlayer.username = botProfile.username;
+                    botPlayer.isBot = true;
+                    botPlayer.isTutorialBot = true; // Flag for forced win
+
+                    const room = createRoom(player, botPlayer);
+                    room.mode = mode;
+                    room.stakeTier = currentStake;
+                    room.rank = currentRank;
+                    room.isBotGame = true;
+                    room.botPlayerId = botProfile.id;
+
+                    activeRooms.set(socket.id, room);
+                    socket.join(room.id);
+
+                    // Skip fee for tutorial? Or process it? Let's process it to be realistic, but maybe ensure they have funds?
+                    // They get 30 coins on signup, so 10 coins stake is fine.
+                    const feeResult = await processEntryFeeAtomic([player], mode, currentStake);
+                    if (!feeResult.success) {
+                        socket.emit('matchError', 'Error al procesar entrada (Saldo insuficiente).');
+                        return;
+                    }
+
+                    socket.emit('matchFound', {
+                        roomId: room.id,
+                        playerIndex: 0,
+                        opponentId: botProfile.id,
+                        opponentImageUrl: null,
+                        stakeTier: currentStake,
+                        mode,
+                        rank: currentRank
+                    });
+
+                    setTimeout(() => startCountdown(room.id), 1000);
+                    return; // EXIT FUNCTION, DO NOT ADD TO QUEUE
                 }
 
                 const isWaiting = (Object.values(waitingPlayers).flat().some(p => p.userId === userId)) ||
@@ -1000,7 +1055,34 @@ app.prepare().then(() => {
 
         const [p1, p2] = room.players;
         let winnerId = forcedWinnerId || (p1.score > p2.score ? p1.userId : p2.userId);
-        if (p1.score === p2.score && !forcedWinnerId) winnerId = 'tie';
+
+        // TUTORIAL LOGIC: Force human win if playing against tutorial bot
+        let isTutorialMatch = false;
+        if (!forcedWinnerId) {
+            if (p2.isTutorialBot) {
+                console.log(`[TUTORIAL] Forcing win for human player ${p1.userId} against tutorial bot`);
+                winnerId = p1.userId;
+                isTutorialMatch = true;
+
+                // Mark tutorial as completed for the human player
+                try {
+                    await supabase.from('profiles').update({ tutorial_match_completed: true }).eq('id', p1.userId);
+                } catch (e) {
+                    console.error('[TUTORIAL_DB_ERROR]', e);
+                }
+            } else if (p1.isTutorialBot) {
+                // Should not happen in current flow, but handling just in case (bot vs human?)
+                winnerId = p2.userId;
+                isTutorialMatch = true;
+                try {
+                    await supabase.from('profiles').update({ tutorial_match_completed: true }).eq('id', p2.userId);
+                } catch (e) {
+                    console.error('[TUTORIAL_DB_ERROR]', e);
+                }
+            }
+        }
+
+        if (p1.score === p2.score && !forcedWinnerId && !isTutorialMatch) winnerId = 'tie';
 
         const updateData = async (player, isWinner) => {
             if (player.isBot) return { newCoins: 999999, newGems: 999999, prize: 0, rpChange: 0, newRp: 1000, newRank: 'MAESTRO' };
