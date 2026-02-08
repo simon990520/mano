@@ -761,7 +761,36 @@ app.prepare().then(() => {
                 if (room.isBotGame && !room.botReplied) {
                     const botPlayer = room.players.find(p => p.isBot);
                     if (botPlayer) {
-                        botPlayer.choice = getBotChoice(room, botPlayer, botArenaStats, botArenaConfigs);
+                        // CHECK FOR TUTORIAL BOT
+                        if (botPlayer.isTutorialBot) {
+                            const humanPlayer = room.players.find(p => !p.isBot);
+                            const hScore = humanPlayer ? humanPlayer.score : 0;
+                            const bScore = botPlayer.score;
+
+                            let wantBotWin = false;
+                            // SCRIPTED FLOW: 3-2 Suspense
+                            // 0-0 -> Human Wins (1-0)
+                            // 1-0 -> Bot Wins (1-1)
+                            // 1-1 -> Human Wins (2-1)
+                            // 2-1 -> Bot Wins (2-2)
+                            // 2-2 -> Human Wins (3-2) -> END
+
+                            if (hScore === 0 && bScore === 0) wantBotWin = false;
+                            else if (hScore === 1 && bScore === 0) wantBotWin = true;
+                            else if (hScore === 1 && bScore === 1) wantBotWin = false;
+                            else if (hScore === 2 && bScore === 1) wantBotWin = true;
+                            else wantBotWin = false; // Default to letting human win to ensure progress
+
+                            const winMove = { rock: 'paper', paper: 'scissors', scissors: 'rock' };
+                            const loseMove = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
+
+                            botPlayer.choice = wantBotWin ? winMove[choice] : loseMove[choice];
+
+                            console.log(`[TUTORIAL] Scripted. Score ${hScore}-${bScore}. Bot will ${wantBotWin ? 'WIN' : 'LOSE'}`);
+                        } else {
+                            // Normal Bot Logic
+                            botPlayer.choice = getBotChoice(room, botPlayer, botArenaStats, botArenaConfigs);
+                        }
                         room.botReplied = true; // Flag to prevent double choice in same round
                     }
                 }
