@@ -14,6 +14,8 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
     const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
     const [username, setUsername] = useState('');
     const [birthDate, setBirthDate] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState('');
+    const [whatsappContact, setWhatsappContact] = useState('573146959639'); // Default fallback
 
     // Shop visibility helpers (UI state)
     const [showCoinShop, setShowCoinShop] = useState<boolean>(false);
@@ -45,7 +47,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
 
         const { data, error } = await supabase
             .from('profiles')
-            .select('id, username, birth_date, coins, gems, rp, rank_name, current_streak, last_claimed_at')
+            .select('id, username, birth_date, phone_number, coins, gems, rp, rank_name, current_streak, last_claimed_at')
             .eq('id', user.id)
             .single();
 
@@ -55,6 +57,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             hasData: !!data,
             username: data?.username,
             birth_date: data?.birth_date,
+            phone_number: data?.phone_number,
             fullData: data
         });
 
@@ -64,18 +67,20 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             return; // Don't change showOnboarding state on network errors
         }
 
-        // If profile is COMPLETE, explicitly hide onboarding
-        if (data && data.username && data.birth_date) {
+        // If profile is COMPLETE (has all 3 fields), explicitly hide onboarding
+        if (data && data.username && data.birth_date && data.phone_number) {
             console.log('[ONBOARDING_DEBUG] Profile is COMPLETE. Setting showOnboarding = FALSE');
             setShowOnboarding(false);
         }
-        // If profile missing or incomplete (no username or birth_date) - but NOT a network error
-        else if (!data || !data.username || !data.birth_date) {
+        // If profile missing or incomplete (no username, birth_date, OR phone_number)
+        else if (!data || !data.username || !data.birth_date || !data.phone_number) {
             console.log('[ONBOARDING_DEBUG] Profile INCOMPLETE. Setting showOnboarding = TRUE', {
-                reason: !data ? 'no data' : !data.username ? 'no username' : 'no birth_date'
+                reason: !data ? 'no data' : !data.username ? 'no username' : !data.birth_date ? 'no birth_date' : 'no phone_number'
             });
             setShowOnboarding(true);
+            // Pre-fill existing data if any
             if (data?.username) setUsername(data.username);
+            if (data?.phone_number) setPhoneNumber(data.phone_number);
         }
 
         if (data) {
@@ -196,6 +201,10 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
         socket.on('rewardClaimed', onRewardClaimed);
         socket.on('purchaseError', onPurchaseError);
         socket.on('profileUpdated', onProfileUpdated);
+        socket.on('appSettingsUpdated', (settings: any) => {
+            if (settings.whatsapp_contact_number) setWhatsappContact(settings.whatsapp_contact_number);
+        });
+        socket.emit('getAppSettings'); // Request dynamic settings
         socket.on('profileUpdateError', onProfileUpdateError);
         socket.on('roomRefunded', onRoomRefunded);
         socket.on('botConfigUpdated', onConfigUpdated);
@@ -238,7 +247,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
         }
 
         // WHATSAPP REDIRECTION
-        const phoneNumber = '573506049629';
+        const phoneNumber = whatsappContact;
         const itemType = type === 'coins' ? 'monedas' : 'gemas';
         const message = `Hola soy ${finalUsername} deseo comprar ${amount} ${itemType}`;
         const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
@@ -288,7 +297,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
 
         console.log(`[ECONOMY] Processing withdrawal: ${amount} ${itemType} (${copValue} COP)`);
 
-        const phoneNumber = '573506049629';
+        const phoneNumber = whatsappContact;
         const message = `Hola soy ${finalUsername} y deseo retirar ${amount} ${itemType} (Equivalente a $${copValue.toLocaleString('es-CO')} COP)`;
         const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
 
@@ -323,7 +332,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
     };
 
     const handleSaveProfile = () => {
-        if (!username.trim() || !birthDate) {
+        if (!username.trim() || !birthDate || !phoneNumber.trim()) {
             setErrorModal({
                 isOpen: true,
                 title: 'DATOS FALTANTES',
@@ -331,8 +340,22 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             });
             return;
         }
+        // Validate phone number format
+        const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+        if (!phoneRegex.test(phoneNumber.replace(/\s/g, ''))) {
+            setErrorModal({
+                isOpen: true,
+                title: 'NÚMERO INVÁLIDO',
+                message: 'Por favor, ingresa un número de WhatsApp válido con código de país (Ej: +573001234567)'
+            });
+            return;
+        }
         if (socket) {
-            socket.emit('updateProfile', { username, birthDate });
+            socket.emit('updateProfile', {
+                username,
+                birth_date: birthDate,
+                phone_number: phoneNumber
+            });
         }
     };
 
@@ -358,6 +381,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             showOnboarding,
             username,
             birthDate,
+            phoneNumber,
             currentStreak,
             lastClaimedAt,
             errorModal,
@@ -374,6 +398,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             setShowOnboarding,
             setUsername,
             setBirthDate,
+            setPhoneNumber,
             handlePurchase,
             handleClaimDaily,
             handleWithdraw,

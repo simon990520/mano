@@ -45,6 +45,16 @@ export default function AdminDashboard() {
     const [botArenaStats, setBotArenaStats] = useState<any[]>([]);
     const [botLoading, setBotLoading] = useState(false);
 
+    // WhatsApp & Settings state
+    const [waStatus, setWaStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+    const [waQr, setWaQr] = useState<string | null>(null);
+    const [waGroups, setWaGroups] = useState<any[]>([]);
+    const [appSettingsState, setAppSettingsState] = useState({
+        whatsapp_contact_number: '',
+        whatsapp_group_id: '',
+        ai_faq_prompt: ''
+    });
+
     useEffect(() => {
         setMounted(true);
         if (typeof window !== 'undefined' && window.innerWidth > 1024) setSidebarOpen(true);
@@ -74,6 +84,7 @@ export default function AdminDashboard() {
                 console.log('[ADMIN_SOCKET] Connected!');
                 socketInstance.emit('joinAdmin');
                 socketInstance.emit('adminGetUsers');
+                socketInstance.emit('getWaStatus'); // Request initial WA status
             });
 
             socketInstance.on('adminRealtimeStats', (data) => {
@@ -96,6 +107,27 @@ export default function AdminDashboard() {
 
             socketInstance.on('adminDataRefreshed', () => {
                 socketInstance.emit('adminGetUsers');
+                socketInstance.emit('getWaStatus');
+                socketInstance.emit('getAppSettings');
+            });
+
+            socketInstance.on('waStatusUpdated', (data) => {
+                setWaStatus(data.status);
+                if (data.qr) setWaQr(data.qr);
+                else if (data.status === 'connected') setWaQr(null);
+            });
+
+            socketInstance.on('waQrUpdated', (data) => {
+                setWaQr(data.qr);
+            });
+
+            socketInstance.on('waGroupsUpdated', (data) => {
+                console.log('[ADMIN] Groups received:', data.groups);
+                setWaGroups(data.groups || []);
+            });
+
+            socketInstance.on('appSettingsUpdated', (settings) => {
+                setAppSettingsState(settings);
             });
 
             socketInstance.on('adminSuccess', (msg) => {
@@ -204,10 +236,21 @@ export default function AdminDashboard() {
         ));
     };
 
+    const handleUpdateAppSettings = () => {
+        if (!socketRef.current) return;
+        socketRef.current.emit('updateAppSettings', appSettingsState);
+    };
+
+    const handleWaReconnect = () => {
+        if (!socketRef.current) return;
+        socketRef.current.emit('waReconnect');
+    };
+
     // Load bot config when switching to bot control view
     useEffect(() => {
         if (activeView === 'botcontrol' && socketRef.current?.connected) {
             loadBotConfig();
+            socketRef.current.emit('getWaStatus'); // Refresh WA status/groups on view switch
         }
     }, [activeView]);
 
@@ -427,6 +470,80 @@ export default function AdminDashboard() {
                     <button onClick={handleUpdateBotConfig} style={{ width: '100%', marginTop: '32px', padding: '20px', borderRadius: '20px', background: colors.primary, color: 'white', border: 'none', fontWeight: 950, fontSize: '1.1rem', cursor: 'pointer', boxShadow: '0 4px 16px rgba(59, 130, 246, 0.4)' }}>💾 GUARDAR CONFIGURACIÓN</button>
                 </div>
 
+                <div style={{ backgroundColor: colors.card, borderRadius: '32px', border: `1px solid ${colors.cardBorder}`, padding: '40px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                        <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.5rem' }}>📱 WhatsApp Bot & AI settings</h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 20px', borderRadius: '14px', background: waStatus === 'connected' ? 'rgba(0, 255, 136, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: waStatus === 'connected' ? colors.accent : colors.danger, fontWeight: 900, fontSize: '0.9rem' }}>
+                            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: waStatus === 'connected' ? colors.accent : colors.danger, display: 'inline-block' }}></span>
+                            {waStatus.toUpperCase()}
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '32px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            <div>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 950, color: colors.textMuted, display: 'block', marginBottom: '12px', textTransform: 'uppercase' }}>Número de Contacto (Visible para todos)</label>
+                                <input type="text" value={appSettingsState.whatsapp_contact_number} onChange={(e) => setAppSettingsState({ ...appSettingsState, whatsapp_contact_number: e.target.value })} style={{ width: '100%', padding: '18px 24px', borderRadius: '16px', background: colors.cardSecondary, border: `2px solid ${colors.cardBorder}`, color: colors.textMain, fontWeight: 800 }} placeholder="Ej: 573001234567" />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 950, color: colors.textMuted, display: 'block', marginBottom: '12px', textTransform: 'uppercase' }}>WhatsApp Group ID (Opcional)</label>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <input type="text" value={appSettingsState.whatsapp_group_id} onChange={(e) => setAppSettingsState({ ...appSettingsState, whatsapp_group_id: e.target.value })} style={{ flex: 1, padding: '18px 24px', borderRadius: '16px', background: colors.cardSecondary, border: `2px solid ${colors.cardBorder}`, color: colors.textMain, fontWeight: 800 }} placeholder="Ej: 120363024508212345@g.us" />
+                                    {waGroups.length > 0 && (
+                                        <select
+                                            onChange={(e) => {
+                                                if (e.target.value) setAppSettingsState({ ...appSettingsState, whatsapp_group_id: e.target.value });
+                                            }}
+                                            style={{ maxWidth: '40px', padding: '0 12px', borderRadius: '16px', background: colors.cardSecondary, border: `2px solid ${colors.cardBorder}`, color: colors.textMain, fontWeight: 800, cursor: 'pointer' }}
+                                        >
+                                            <option value="">📋</option>
+                                            {waGroups.map(g => (
+                                                <option key={g.id} value={g.id}>
+                                                    {g.isAdmin ? '👑 ' : ''}{g.name || 'Sin Nombre'} ({g.participantCount}) {!g.isAdmin ? '(Sin Admin)' : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </div>
+                                {waGroups.length === 0 && waStatus === 'connected' && <p style={{ fontSize: '0.7rem', color: colors.textMuted, marginTop: '6px' }}>No se encontraron grupos.</p>}
+                                {appSettingsState.whatsapp_group_id && waGroups.find(g => g.id === appSettingsState.whatsapp_group_id && !g.isAdmin) && (
+                                    <p style={{ fontSize: '0.7rem', color: colors.danger, marginTop: '6px', fontWeight: 800 }}>⚠️ El bot no es admin en este grupo. Las invitaciones fallarán.</p>
+                                )}
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.75rem', fontWeight: 950, color: colors.textMuted, display: 'block', marginBottom: '12px', textTransform: 'uppercase' }}>Prompt de la IA (Conocimiento Base)</label>
+                                <textarea rows={4} value={appSettingsState.ai_faq_prompt} onChange={(e) => setAppSettingsState({ ...appSettingsState, ai_faq_prompt: e.target.value })} style={{ width: '100%', padding: '18px 24px', borderRadius: '16px', background: colors.cardSecondary, border: `2px solid ${colors.cardBorder}`, color: colors.textMain, fontWeight: 500, fontFamily: 'inherit', resize: 'vertical' }} placeholder="Define el tono y las reglas de respuesta de la IA..." />
+                            </div>
+                            <button onClick={handleUpdateAppSettings} style={{ width: '100%', padding: '20px', borderRadius: '20px', background: colors.accent, color: colors.bg, border: 'none', fontWeight: 950, fontSize: '1.1rem', cursor: 'pointer', boxShadow: '0 4px 16px rgba(16, 185, 129, 0.4)' }}>💾 GUARDAR AJUSTES GLOBALES</button>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '20px', background: colors.cardSecondary, borderRadius: '24px', padding: '32px', border: `1px solid ${colors.cardBorder}` }}>
+                            {waStatus === 'connected' ? (
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '4rem', marginBottom: '16px' }}>✅</div>
+                                    <h4 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900 }}>¡BOT CONECTADO!</h4>
+                                    <p style={{ color: colors.textMuted, marginTop: '12px' }}>El bot de WhatsApp está en línea y procesando mensajes.</p>
+                                    <button onClick={handleWaReconnect} style={{ marginTop: '24px', padding: '12px 24px', borderRadius: '12px', border: `2px solid ${colors.danger}`, background: 'transparent', color: colors.danger, fontWeight: 900, cursor: 'pointer' }}>FORZAR RECONEXIÓN</button>
+                                </div>
+                            ) : waQr ? (
+                                <div style={{ textAlign: 'center' }}>
+                                    <h4 style={{ margin: '0 0 20px 0', fontSize: '1.2rem', fontWeight: 900 }}>ESCANEA EL CÓDIGO QR</h4>
+                                    <img src={waQr} alt="WhatsApp QR" style={{ width: '250px', height: '250px', borderRadius: '16px', border: `8px solid white` }} />
+                                    <p style={{ color: colors.textMuted, marginTop: '20px', fontSize: '0.85rem' }}>Abre WhatsApp {'>'} Dispositivos vinculados {'>'} Vincular un dispositivo</p>
+                                    <button onClick={handleWaReconnect} style={{ marginTop: '20px', padding: '12px 24px', borderRadius: '12px', background: colors.cardBorder, color: colors.textMain, border: 'none', fontWeight: 900, cursor: 'pointer' }}>GENERAR NUEVO QR</button>
+                                </div>
+                            ) : (
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '3rem', marginBottom: '16px' }}>⏳</div>
+                                    <h4 style={{ margin: 0, fontWeight: 900 }}>{waStatus === 'connecting' ? 'CONECTANDO...' : 'DESCONECTADO'}</h4>
+                                    <p style={{ color: colors.textMuted, marginTop: '12px' }}>{waStatus === 'connecting' ? 'Iniciando sesión de WhatsApp...' : 'Vuelve a vincular el dispositivo para activar el bot.'}</p>
+                                    <button onClick={handleWaReconnect} style={{ marginTop: '24px', padding: '16px 32px', borderRadius: '16px', background: colors.primary, color: 'white', border: 'none', fontWeight: 950, cursor: 'pointer' }}>CONECTAR BOT</button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
                 <div style={{ backgroundColor: colors.card, borderRadius: '32px', border: `1px solid ${colors.cardBorder}`, overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
                     <div style={{ padding: '32px 40px', borderBottom: `1px solid ${colors.cardBorder}` }}>
                         <h3 style={{ marginTop: 0, marginBottom: '8px', fontWeight: 900, fontSize: '1.5rem' }}>🎯 Configuración por Arena</h3>
@@ -561,7 +678,7 @@ export default function AdminDashboard() {
                     </nav>
 
                     <div style={{ padding: '24px', borderTop: `1px solid ${colors.cardBorder}`, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <a href="https://wa.me/573506049629" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '18px', borderRadius: '24px', backgroundColor: '#10b981', color: 'white', textDecoration: 'none', fontWeight: 900, textAlign: 'center', justifyContent: 'center' }}>💬 CANAL CAJEROS</a>
+                        <a href="https://wa.me/573146959639" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '18px', borderRadius: '24px', backgroundColor: '#10b981', color: 'white', textDecoration: 'none', fontWeight: 900, textAlign: 'center', justifyContent: 'center' }}>💬 CANAL CAJEROS</a>
                         <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} style={{ padding: '16px', borderRadius: '24px', border: `2px solid ${colors.cardBorder}`, background: 'none', color: colors.textMain, fontWeight: 900, cursor: 'pointer' }}>{theme === 'dark' ? '☀️ CLARO' : '🌙 OSCURO'}</button>
                     </div>
                 </aside>
