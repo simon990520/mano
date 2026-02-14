@@ -344,6 +344,8 @@ export default function Home() {
                     setUsername={economyActions.setUsername}
                     birthDate={economyState.birthDate}
                     setBirthDate={economyActions.setBirthDate}
+                    phoneNumber={economyState.phoneNumber}
+                    setPhoneNumber={economyActions.setPhoneNumber}
                     onSave={economyActions.handleSaveProfile}
                 />
             )}

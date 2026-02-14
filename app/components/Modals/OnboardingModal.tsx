@@ -6,6 +6,8 @@ interface OnboardingModalProps {
     setUsername: (u: string) => void;
     birthDate: string;
     setBirthDate: (d: string) => void;
+    phoneNumber: string;
+    setPhoneNumber: (p: string) => void;
     onSave: () => void;
 }
 
@@ -14,6 +16,8 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     setUsername,
     birthDate,
     setBirthDate,
+    phoneNumber,
+    setPhoneNumber,
     onSave
 }) => {
     return (
@@ -48,6 +52,16 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                         className="modal-input"
                         value={birthDate}
                         onChange={(e) => setBirthDate(e.target.value)}
+                    />
+                </div>
+                <div className="input-group">
+                    <label className="input-label">Número de WhatsApp (con indicativo)</label>
+                    <input
+                        type="tel"
+                        className="modal-input"
+                        placeholder="Ej: +573001234567"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
                     />
                 </div>
                 <button className="btn-enter-arena" onClick={onSave}>

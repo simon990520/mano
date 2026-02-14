@@ -12,6 +12,14 @@ const { waitingPlayers, waitingRanked, createPlayer, removeFromQueue } = require
 const { activeRooms, createRoom, findRoomById } = require('./game/roomManager');
 const { getBotChoice, createBotProfile } = require('./lib/bot-engine');
 
+// MVC MODULES
+const { isAdmin, sanitizeInput, validatePhoneNumber } = require('./server/utils/security');
+const { botConfig, appSettings, botArenaConfigs, botArenaStats, bonusClaimLock, updateBotConfig, updateAppSettings, updateBotArenaConfigs, updateBotArenaStats } = require('./server/utils/constants');
+const { connectToWhatsApp, getStatus, getQr } = require('./server/services/whatsappService');
+const { handleIncomingWaMessage, sendWelcomeMessage, registerWhatsappHandlers } = require('./server/controllers/whatsappController');
+
+// WhatsApp Bot Dependencies loaded in service module
+
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
 const port = process.env.PORT || 3000;
@@ -21,29 +29,42 @@ const handle = app.getRequestHandler();
 
 const userSockets = new Map(); // userId -> socketId (Enforce single session)
 
-// Bot configuration cache
-let botConfig = { enabled: false, lobby_wait_seconds: 25 };
-let botArenaConfigs = [];
-let botArenaStats = [];
 
 // Admin whitelist from .env
+// Admin whitelist from .env
 const adminIds = (process.env.ADMIN_USER_IDS || '').split(',').map(id => id.trim());
-const isAdmin = (uId) => adminIds.includes(uId);
+// isAdmin imported from security utils
 
-// Security: Whitelist of allowed stakes
-const ALLOWED_STAKES = [10, 50, 100, 500, 1000];
+// ALLOWED_STAKES imported from security/constants
 
-// Security: Daily reward cooldown cache (userId -> lastClaimTime)
-const dailyRewardCooldowns = new Map();
+// dailyRewardCooldowns imported from constants
 
-// Security: Basic sanitization helper
-const sanitizeInput = (str) => {
-    if (typeof str !== 'string') return '';
-    return str.replace(/[<>]/g, '').trim().substring(0, 30); // Remove HTML tags and limit length
-};
+// sanitizeInput imported from security utils
 
-// Security: Bonus claim lock (prevent concurrent/double bonus claims during onboarding burst)
-const bonusClaimLock = new Set();
+// bonusClaimLock imported from constants
+
+// HUMANIZATION & ANTI-DETECTION
+const messageHistory = new Map(); // Track message patterns
+const lastMessageTime = new Map(); // Anti-spam
+
+// Humanization: Random delay between min and max (in milliseconds)
+function getHumanDelay(min = 1000, max = 3000) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// Simulate typing indicator duration based on message length
+function getTypingDuration(messageLength) {
+    // Average typing speed: 40-60 chars per second
+    const baseSpeed = 45 + Math.random() * 15; // 45-60 cps
+    const duration = (messageLength / baseSpeed) * 1000;
+    // Add random pause (thinking time)
+    const thinkingTime = Math.random() * 2000; // 0-2s
+    return Math.min(duration + thinkingTime, 10000); // Max 10s
+}
+
+// Humanization functions imported from utils
+// waGroups imported from service
+
 
 // Helper for parsing JSON body
 const getBody = (req) => new Promise((resolve) => {
@@ -54,33 +75,79 @@ const getBody = (req) => new Promise((resolve) => {
     });
 });
 
+// Cargar configuración global (App Settings)
+async function loadAppSettings() {
+    try {
+        const { data: settings } = await supabase.from('app_settings').select('*');
+        if (settings) {
+            settings.forEach(s => {
+                if (appSettings.hasOwnProperty(s.key)) {
+                    appSettings[s.key] = s.value;
+                }
+            });
+            console.log('[APP_SETTINGS] Loaded:', appSettings);
+        }
+    } catch (error) {
+        console.error('[APP_SETTINGS] Error loading:', error.message);
+    }
+}
+
 // Cargar configuración del bot desde Supabase
 async function loadBotConfig() {
     try {
+        await loadAppSettings(); // Load global settings first
+
         // Cargar configuración global
         const { data: config } = await supabase.from('bot_config').select('*').limit(1).single();
         if (config) {
-            botConfig = config;
+            Object.assign(botConfig, config);
             console.log('[BOT_SYSTEM] Configuration loaded:', botConfig);
         }
 
         // Cargar configuración por arena
         const { data: arenaConfigs } = await supabase.from('bot_arena_config').select('*');
         if (arenaConfigs) {
-            botArenaConfigs = arenaConfigs;
+            botArenaConfigs.length = 0;
+            botArenaConfigs.push(...arenaConfigs);
             console.log(`[BOT_SYSTEM] Loaded ${arenaConfigs.length} arena configurations`);
         }
 
         // Cargar estadísticas
         const { data: stats } = await supabase.from('bot_arena_stats').select('*');
         if (stats) {
-            botArenaStats = stats;
+            botArenaStats.length = 0;
+            botArenaStats.push(...stats);
             console.log(`[BOT_SYSTEM] Loaded stats for ${stats.length} arenas`);
         }
     } catch (error) {
         console.error('[BOT_SYSTEM] Error loading configuration:', error.message);
     }
 }
+
+// WHATSAPP BOT INITIALIZATION (now using service module)
+// Connection function moved to server/services/whatsappService.js
+// Message handler moved to server/controllers/whatsappController.js
+// This function just calls the service
+async function initializeWhatsAppBot(io) {
+    const socket = await connectToWhatsApp(io);
+
+    if (socket) {
+        // Set up message listener
+        socket.ev.on('messages.upsert', async (m) => {
+            if (m.type === 'notify') {
+                for (const msg of m.messages) {
+                    if (!msg.key.fromMe && msg.message) {
+                        await handleIncomingWaMessage(msg);
+                    }
+                }
+            }
+        });
+    }
+}
+
+// Export for controller access
+module.exports.loadAppSettings = loadAppSettings;
+
 
 app.prepare().then(() => {
     const httpServer = createServer(async (req, res) => {
@@ -104,6 +171,9 @@ app.prepare().then(() => {
     // Cargar configuración del bot al iniciar
     loadBotConfig();
 
+    // Iniciar conexión de WhatsApp e inicializar listeners
+    initializeWhatsAppBot(io).catch(err => console.error('[WA_INIT] Error:', err));
+
     // SECURITY & SYNC: Supabase Realtime Listener (Syncs online server with local/remote admin changes)
     const subscribeToBotConfig = () => {
         console.log('[SUPABASE_REALTIME] Initializing bot configuration sync...');
@@ -112,10 +182,10 @@ app.prepare().then(() => {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'bot_config' }, (payload) => {
                 console.log(`[SUPABASE_REALTIME] Bot Global Config ${payload.eventType}:`, payload.new || payload.old);
                 if (payload.eventType === 'DELETE') {
-                    // No deberíamos borrar la config global, pero si sucede volvemos a valores por defecto
-                    botConfig = { enabled: false, lobby_wait_seconds: 25 };
+                    // Reset to defaults via mutation
+                    Object.assign(botConfig, { enabled: false, lobby_wait_seconds: 25 });
                 } else {
-                    botConfig = { ...botConfig, ...payload.new };
+                    Object.assign(botConfig, payload.new);
                 }
                 io.to('admins').emit('botConfigUpdated', botConfig);
             })
@@ -129,7 +199,8 @@ app.prepare().then(() => {
                     if (idx !== -1) botArenaConfigs[idx] = { ...botArenaConfigs[idx], ...payload.new };
                     else botArenaConfigs.push(payload.new);
                 } else if (payload.eventType === 'DELETE') {
-                    botArenaConfigs = botArenaConfigs.filter(c => c.id !== payload.old.id);
+                    const idx = botArenaConfigs.findIndex(c => c.id === payload.old.id);
+                    if (idx !== -1) botArenaConfigs.splice(idx, 1);
                 }
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'bot_arena_stats' }, (payload) => {
@@ -139,7 +210,8 @@ app.prepare().then(() => {
                     if (idx !== -1) botArenaStats[idx] = { ...botArenaStats[idx], ...payload.new };
                     else botArenaStats.push(payload.new);
                 } else if (payload.eventType === 'DELETE') {
-                    botArenaStats = botArenaStats.filter(c => c.id !== payload.old.id);
+                    const idx = botArenaStats.findIndex(c => c.id === payload.old.id);
+                    if (idx !== -1) botArenaStats.splice(idx, 1);
                 }
             })
             .subscribe((status) => {
@@ -147,6 +219,21 @@ app.prepare().then(() => {
             });
     };
     subscribeToBotConfig();
+
+    const subscribeToAppSettings = () => {
+        supabase.channel('app-settings-sync')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, (payload) => {
+                console.log(`[SUPABASE_REALTIME] App Settings ${payload.eventType}:`, payload.new || payload.old);
+                if (payload.new && payload.new.key && appSettings.hasOwnProperty(payload.new.key)) {
+                    appSettings[payload.new.key] = payload.new.value;
+                    io.emit('appSettingsUpdated', appSettings);
+                }
+            })
+            .subscribe((status) => {
+                console.log(`[SUPABASE_REALTIME] Settings sync status: ${status}`);
+            });
+    };
+    subscribeToAppSettings();
 
     // FALLBACK: Periodic reload every 5 minutes in case Realtime fails
     setInterval(() => {
@@ -161,8 +248,11 @@ app.prepare().then(() => {
         const userId = socket.userId;
         console.log('[SERVER_INFO] Player connected:', socket.id, 'User:', userId);
 
-        // Send public configuration upon connection (e.g. min_withdrawal_cop)
+        // Send public configuration upon connection
         socket.emit('botConfigUpdated', botConfig);
+
+        // Register WhatsApp Admin Handlers
+        registerWhatsappHandlers(io, socket, userId, isAdmin);
 
         if (userSockets.has(userId)) {
             const oldSocketId = userSockets.get(userId);
@@ -177,10 +267,11 @@ app.prepare().then(() => {
         userSockets.set(userId, socket.id);
 
         socket.on('updateProfile', async (data) => {
-            let { username, birthDate } = data;
+            let { username, birthDate, phone_number } = data;
 
             // SECURITY: Sanitize inputs
             username = sanitizeInput(username);
+            phone_number = sanitizeInput(phone_number);
 
             try {
                 // Check if username is already taken by someone ELSE
@@ -233,12 +324,38 @@ app.prepare().then(() => {
                         id: userId,
                         username: username,
                         birth_date: birthDate,
+                        phone_number: phone_number,
                         coins: finalCoins,
                         gems: finalGems,
                         current_streak: currentStreak,
                         last_claimed_at: lastClaimedAt,
                         updated_at: new Date().toISOString()
                     });
+
+                if (!error && isNewOnboarding && phone_number && waSock && waStatus === 'connected') {
+                    // WHATSAPP TASKS: Welcome message & Group invite
+                    try {
+                        const jid = phone_number.replace('+', '').replace(' ', '') + '@s.whatsapp.net';
+
+                        // 1. Welcome DM
+                        await waSock.sendMessage(jid, {
+                            text: `¡Bienvenido *${username}* a Piedra.fun! 🚀\n\nTu cuenta ha sido creada con éxito y has recibido un bono de *30 monedas*. 🪙\n\nSi tienes dudas, ¡pregúntame por aquí! Soy tu asistente IA.`
+                        });
+
+                        // 2. Group Invitation (if configured)
+                        if (appSettings.whatsapp_group_id) {
+                            try {
+                                await waSock.groupParticipantsUpdate(appSettings.whatsapp_group_id, [jid], 'add');
+                                console.log(`[WA_BOT] Added ${username} to group`);
+                            } catch (gErr) {
+                                console.error('[WA_BOT] Error adding to group:', gErr.message);
+                                // Fallback: Send invite link
+                            }
+                        }
+                    } catch (waErr) {
+                        console.error('[WA_BOT] Error sending welcome message:', waErr.message);
+                    }
+                }
 
                 if (error) {
                     console.error('[SERVER_DB] Profile update error:', error.message);
@@ -353,6 +470,40 @@ app.prepare().then(() => {
             socket.emit('adminDataRefreshed');
         });
 
+        // ============ WHATSAPP ADMIN CONTROLS ============
+        socket.on('getWaStatus', () => {
+            if (!isAdmin(userId)) return;
+            socket.emit('waStatusUpdated', { status: waStatus, qr: waQr });
+        });
+
+        socket.on('waReconnect', () => {
+            if (!isAdmin(userId)) return;
+            console.log('[WA_BOT] Manual reconnect requested by admin');
+            connectToWhatsApp(io);
+        });
+
+        socket.on('getAppSettings', async () => {
+            // Both users and admins need settings (for contact number)
+            await loadAppSettings();
+            socket.emit('appSettingsUpdated', appSettings);
+        });
+
+        socket.on('updateAppSettings', async (data) => {
+            if (!isAdmin(userId)) return socket.emit('adminError', 'No autorizado');
+            try {
+                for (const [key, value] of Object.entries(data)) {
+                    if (appSettings.hasOwnProperty(key)) {
+                        await supabase.from('app_settings').upsert({ key, value, updated_at: new Date().toISOString() });
+                    }
+                }
+                await loadAppSettings();
+                socket.emit('adminSuccess', 'Configuración actualizada');
+                io.emit('appSettingsUpdated', appSettings); // Notify everyone
+            } catch (e) {
+                socket.emit('adminError', 'Error actualizando settings');
+            }
+        });
+
         socket.on('adminGetUsers', async () => {
             if (!isAdmin(userId)) return socket.emit('adminError', 'No autorizado');
             try {
@@ -404,7 +555,7 @@ app.prepare().then(() => {
                     console.error('[ADMIN_ERROR] updateBotConfig:', error.message);
                     socket.emit('adminError', error.message);
                 } else {
-                    botConfig = updated || { ...botConfig, ...configData }; // Update cache
+                    Object.assign(botConfig, updated || configData); // Update cache via mutation
                     socket.emit('adminSuccess', 'Configuración del bot actualizada');
                     io.to('admins').emit('botConfigUpdated', botConfig);
                 }
