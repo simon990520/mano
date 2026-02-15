@@ -62,7 +62,22 @@ async function getAIResponse(userMessage, systemPrompt = null) {
         throw new Error('DEEPSEEK_API_KEY not configured');
     }
 
-    const prompt = systemPrompt || appSettings.ai_faq_prompt || 'Eres un asistente útil de Piedra.fun';
+    const defaultPrompt = `Eres el asistente oficial de Piedra.fun.
+    OBJETIVO: Persuadir al usuario para que juegue y apueste YA.
+    REGLA DE ORO: Máximo 20 palabras.
+    ESTILO: Entusiasta, directo, usa emojis 🚀 💰.
+    
+    NO expliques reglas a menos que pregunten.
+    NO saludes si no es necesario.
+    
+    EJEMPLOS:
+    U: "Cómo juego?"
+    B: "¡Recarga monedas y gana en segundos! 🤑 ¡Entra a una arena ahora! 🚀"
+    
+    U: "Hola"
+    B: "¡Hola! 👋 ¿Listo para ganar dinero real? 💰 ¡Juega ya!"`;
+
+    const prompt = systemPrompt || appSettings.ai_faq_prompt || defaultPrompt;
 
     console.log('[AI_SERVICE] Calling DeepSeek API...');
 
@@ -72,8 +87,8 @@ async function getAIResponse(userMessage, systemPrompt = null) {
             { role: "system", content: prompt },
             { role: "user", content: userMessage }
         ],
-        temperature: 0.7,
-        max_tokens: 500
+        temperature: 0.8,
+        max_tokens: 200
     }, {
         headers: {
             'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,

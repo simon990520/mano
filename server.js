@@ -24,6 +24,11 @@ const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
 const port = process.env.PORT || 3000;
 
+// Rate Limiting Maps
+// Rate Limiting Maps
+const rateLimits = new Map();
+const dailyRewardCooldowns = new Map(); // Fix: Define this map
+// bonusClaimLock and roomRefundLock are imported from constants
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
@@ -288,10 +293,10 @@ app.prepare().then(() => {
                     }
                 }
 
-                // Fetch existing profile to check columns (include streak data)
+                // Fetch existing profile to check columns (include streak data and phone)
                 const { data: existing } = await supabase
                     .from('profiles')
-                    .select('id, username, birth_date, coins, gems, current_streak, last_claimed_at')
+                    .select('id, username, birth_date, coins, gems, current_streak, last_claimed_at, phone_number')
                     .eq('id', userId)
                     .maybeSingle();
 
@@ -332,28 +337,17 @@ app.prepare().then(() => {
                         updated_at: new Date().toISOString()
                     });
 
-                if (!error && isNewOnboarding && phone_number && waSock && waStatus === 'connected') {
-                    // WHATSAPP TASKS: Welcome message & Group invite
+                const phoneChanged = phone_number && (phone_number !== existing?.phone_number);
+                console.log(`[WA_BOT_TRACE] Profile Update Logic. error: ${!!error}, isNew: ${isNewOnboarding}, phoneChanged: ${phoneChanged}, phone: ${phone_number}, Status: ${getStatus()}`);
+
+                // Trigger welcome if phone is new/changed OR if it's the very first onboarding
+                if (!error && phone_number && (isNewOnboarding || phoneChanged) && getStatus() === 'connected') {
                     try {
-                        const jid = phone_number.replace('+', '').replace(' ', '') + '@s.whatsapp.net';
-
-                        // 1. Welcome DM
-                        await waSock.sendMessage(jid, {
-                            text: `¡Bienvenido *${username}* a Piedra.fun! 🚀\n\nTu cuenta ha sido creada con éxito y has recibido un bono de *30 monedas*. 🪙\n\nSi tienes dudas, ¡pregúntame por aquí! Soy tu asistente IA.`
-                        });
-
-                        // 2. Group Invitation (if configured)
-                        if (appSettings.whatsapp_group_id) {
-                            try {
-                                await waSock.groupParticipantsUpdate(appSettings.whatsapp_group_id, [jid], 'add');
-                                console.log(`[WA_BOT] Added ${username} to group`);
-                            } catch (gErr) {
-                                console.error('[WA_BOT] Error adding to group:', gErr.message);
-                                // Fallback: Send invite link
-                            }
-                        }
+                        console.log(`[WA_BOT_TRACE] Triggering sendWelcomeMessage for ${username} (${phone_number})`);
+                        const { sendWelcomeMessage } = require('./server/controllers/whatsappController');
+                        await sendWelcomeMessage(phone_number, username);
                     } catch (waErr) {
-                        console.error('[WA_BOT] Error sending welcome message:', waErr.message);
+                        console.error('[WA_BOT] Error triggering welcome flow:', waErr.message);
                     }
                 }
 
@@ -470,17 +464,8 @@ app.prepare().then(() => {
             socket.emit('adminDataRefreshed');
         });
 
-        // ============ WHATSAPP ADMIN CONTROLS ============
-        socket.on('getWaStatus', () => {
-            if (!isAdmin(userId)) return;
-            socket.emit('waStatusUpdated', { status: waStatus, qr: waQr });
-        });
+        // WhatsApp Admin Controls handled by registerWhatsappHandlers (controllers/whatsappController.js)
 
-        socket.on('waReconnect', () => {
-            if (!isAdmin(userId)) return;
-            console.log('[WA_BOT] Manual reconnect requested by admin');
-            connectToWhatsApp(io);
-        });
 
         socket.on('getAppSettings', async () => {
             // Both users and admins need settings (for contact number)

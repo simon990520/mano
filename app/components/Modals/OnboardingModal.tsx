@@ -20,6 +20,18 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     setPhoneNumber,
     onSave
 }) => {
+    // Auto-detect country code based on timezone
+    React.useEffect(() => {
+        if (!phoneNumber) {
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            if (tz === 'America/Bogota') {
+                setPhoneNumber('+57');
+            } else {
+                setPhoneNumber('+');
+            }
+        }
+    }, []);
+
     return (
         <div className="modal-overlay" style={{ zIndex: 30000 }}>
             <div className="modal-content" style={{ padding: '30px' }}>

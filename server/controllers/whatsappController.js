@@ -44,32 +44,45 @@ async function handleIncomingWaMessage(msg) {
  * @param {string} username - Nombre de usuario
  */
 async function sendWelcomeMessage(phoneNumber, username) {
+    console.log(`[WA_BOT_TRACE] sendWelcomeMessage entry. Phone: ${phoneNumber}, User: ${username}`);
     const waSock = getSocket();
     const waStatus = getStatus();
 
     if (!waSock || waStatus !== 'connected') {
-        console.log('[WA_CONTROLLER] Cannot send welcome: not connected');
+        console.log(`[WA_BOT_TRACE] Cannot send welcome: not connected (Status: ${waStatus})`);
         return false;
     }
 
     try {
-        const jid = phoneNumber.replace('+', '').replace(/\s/g, '') + '@s.whatsapp.net';
+        const cleanPhone = phoneNumber.replace(/\D/g, '');
+        const jid = `${cleanPhone}@s.whatsapp.net`;
+        console.log(`[WA_BOT_TRACE] Constructed JID: ${jid}`);
 
-        // Welcome DM
-        const welcomeMsg = `¡Bienvenido *${username}* a Piedra.fun! 🚀\n\nTu cuenta ha sido creada con éxito y has recibido un bono de *30 monedas*. 🪙\n\nSi tienes dudas, ¡pregúntame por aquí! Soy tu asistente IA.`;
-        await sendHumanizedMessage(jid, welcomeMsg);
+        let userWasAdded = false;
 
         //  Group Invitation (if configured)
+        console.log(`[WA_BOT_TRACE] Checking group ID: ${appSettings.whatsapp_group_id}`);
         if (appSettings.whatsapp_group_id) {
-            const added = await addUserToGroup(appSettings.whatsapp_group_id, jid);
-            if (added) {
-                console.log(`[WA_CONTROLLER] Added ${username} to group`);
+            console.log(`[WA_BOT_TRACE] Adding ${username} to group ${appSettings.whatsapp_group_id}`);
+            const result = await addUserToGroup(appSettings.whatsapp_group_id, jid);
+            if (result.added) {
+                console.log(`[WA_BOT_TRACE] Success: Added ${username} to group`);
+                userWasAdded = true;
+            } else if (result.alreadyMember) {
+                console.log(`[WA_BOT_TRACE] ${username} was already a member.`);
+            } else {
+                console.warn(`[WA_BOT_TRACE] Failed: Could not add ${username} to group:`, result.error);
             }
         }
 
+        // Welcome DM - Always send if it's a welcome flow (new phone/onboarding)
+        const welcomeMsg = `¡Bienvenido *${username}* a Piedra.fun! 🚀\n\nTu cuenta ha sido creada con éxito y has recibido un bono de *30 monedas*. 🪙\n\nSi tienes dudas, ¡pregúntame por aquí! Soy tu asistente IA.`;
+        console.log(`[WA_BOT_TRACE] Sending Welcome DM to ${jid}...`);
+        await sendHumanizedMessage(jid, welcomeMsg);
+
         return true;
     } catch (error) {
-        console.error('[WA_CONTROLLER] Error sending welcome message:', error.message);
+        console.error('[WA_BOT_TRACE] Error in welcome flow:', error.message);
         return false;
     }
 }
@@ -164,6 +177,23 @@ function registerWhatsappHandlers(io, socket, userId, isAdmin) {
         } catch (e) {
             console.error('[WA_ADMIN] Error updating settings:', e.message);
             socket.emit('adminError', 'Error actualizando configuración: ' + e.message);
+        }
+    });
+
+    // [ADMIN] Expose Group Sync
+    socket.on('syncWaGroup', async (data) => {
+        if (!isAdmin(userId)) return socket.emit('adminError', 'No autorizado');
+
+        const { groupId } = data;
+        if (!groupId) return socket.emit('adminError', 'Faltan parámetros (groupId)');
+
+        const { syncGroupParticipants } = require('../services/whatsappService');
+        try {
+            // Run in background, don't await blocking
+            syncGroupParticipants(io, groupId);
+            socket.emit('adminSuccess', 'Sincronización iniciada en segundo plano...');
+        } catch (e) {
+            socket.emit('adminError', 'Error al iniciar sync: ' + e.message);
         }
     });
 }

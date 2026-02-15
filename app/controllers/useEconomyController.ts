@@ -80,6 +80,7 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             setShowOnboarding(true);
             // Pre-fill existing data if any
             if (data?.username) setUsername(data.username);
+            if (data?.birth_date) setBirthDate(data.birth_date); // Autofill birthdate
             if (data?.phone_number) setPhoneNumber(data.phone_number);
         }
 
@@ -340,21 +341,38 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
             });
             return;
         }
-        // Validate phone number format
-        const phoneRegex = /^\+?[1-9]\d{1,14}$/;
-        if (!phoneRegex.test(phoneNumber.replace(/\s/g, ''))) {
+
+        // 1. Sanitize: Remove spaces, dashes, parentheses
+        let cleanPhone = phoneNumber.replace(/[\s\-\(\)]/g, '');
+
+        // 2. Format: Ensure it starts with +
+        // If it sends 10 digits (e.g. 3001234567), assume Colombia (+57)
+        if (!cleanPhone.startsWith('+')) {
+            if (cleanPhone.length === 10 && cleanPhone.startsWith('3')) {
+                cleanPhone = '+57' + cleanPhone;
+            } else {
+                cleanPhone = '+' + cleanPhone;
+            }
+        }
+
+        // 3. Validate phone number format (E.164-like)
+        // Must be + followed by 7-15 digits
+        const phoneRegex = /^\+\d{7,15}$/;
+
+        if (!phoneRegex.test(cleanPhone)) {
             setErrorModal({
                 isOpen: true,
                 title: 'NÚMERO INVÁLIDO',
-                message: 'Por favor, ingresa un número de WhatsApp válido con código de país (Ej: +573001234567)'
+                message: 'El número no es válido. Intenta usar el formato +573001234567.'
             });
             return;
         }
+
         if (socket) {
             socket.emit('updateProfile', {
-                username,
+                username: username.trim(),
                 birth_date: birthDate,
-                phone_number: phoneNumber
+                phone_number: cleanPhone
             });
         }
     };

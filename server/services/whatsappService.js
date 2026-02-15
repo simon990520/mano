@@ -76,19 +76,25 @@ async function connectToWhatsApp(io) {
             const shouldReconnect = (lastDisconnect.error instanceof Boom)
                 ? lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut
                 : true;
-            console.log('[WA_SERVICE] Connection closed. Reconnecting:', shouldReconnect);
+
+            console.log(`[WA_SERVICE] Connection closed. Type: ${lastDisconnect.error?.output?.statusCode || 'Unknown'}. Reconnecting: ${shouldReconnect}`);
+
             waStatus = 'disconnected';
             waQr = null;
             io.emit('waStatusUpdated', { status: waStatus, qr: waQr });
-            if (shouldReconnect) connectToWhatsApp(io);
+
+            if (shouldReconnect) {
+                // Exponential backoff or simple delay to prevent tight loops
+                setTimeout(() => connectToWhatsApp(io), 3000);
+            }
         } else if (connection === 'open') {
             console.log('[WA_SERVICE] Connection opened successfully');
             waStatus = 'connected';
             waQr = null;
             io.emit('waStatusUpdated', { status: waStatus, qr: waQr });
 
-            // Fetch groups when connected
-            await fetchBotGroups();
+            // Fetch groups when connected, but don't block
+            fetchBotGroups().catch(e => console.error('[WA_SERVICE] Failed to fetch groups on connect:', e.message));
         }
     });
 
@@ -157,23 +163,31 @@ async function fetchBotGroups() {
         const groupList = [];
 
         for (const groupId in groups) {
-            const group = groups[groupId];
-            const participants = group.participants || [];
-            const botJid = waSock.user.id.split(':')[0] + '@s.whatsapp.net';
+            try {
+                console.log('[DEBUG_ADMIN] waSock.user:', JSON.stringify(waSock.user, null, 2));
+                const group = groups[groupId];
+                const participants = group.participants || [];
+                const botNumber = waSock.user.id.split(':')[0].split('@')[0];
+                const botLid = waSock.user.lid ? waSock.user.lid.split(':')[0].split('@')[0] : null;
 
-            // Find bot in participants
-            const botParticipant = participants.find(p => {
-                const pId = p.id.split(':')[0] + '@s.whatsapp.net';
-                return pId === botJid;
-            });
-            const isAdmin = botParticipant && (botParticipant.admin === 'admin' || botParticipant.admin === 'superadmin');
+                // Find bot in participants
+                const botParticipant = participants.find(p => {
+                    const pNumber = p.id.split(':')[0].split('@')[0];
+                    return pNumber === botNumber || (botLid && pNumber === botLid);
+                });
 
-            groupList.push({
-                id: groupId,
-                name: group.subject,
-                participantCount: participants.length,
-                isAdmin: !!isAdmin
-            });
+
+                const isAdmin = botParticipant && (botParticipant.admin === 'admin' || botParticipant.admin === 'superadmin');
+
+                groupList.push({
+                    id: groupId,
+                    name: group.subject,
+                    participantCount: participants.length,
+                    isAdmin: !!isAdmin
+                });
+            } catch (innerErr) {
+                console.error(`[WA_SERVICE] Error processing group ${groupId}:`, innerErr.message);
+            }
         }
 
         console.log(`[WA_SERVICE] Found ${groupList.length} groups (Admin in ${groupList.filter(g => g.isAdmin).length}).`);
@@ -186,23 +200,168 @@ async function fetchBotGroups() {
 }
 
 /**
- * Agrega un usuario a un grupo de WhatsApp
+ * Verifica si un usuario está en el grupo y lo agrega si no lo está
  * @param {string} groupId - ID del grupo
- * @param {string} userJid - JID del usuario
+ * @param {string} userJid - JID del usuario (numeros@s.whatsapp.net)
+ * @returns {Promise<boolean>} true si fue agregado o ya estaba, false si falló
  */
-async function addUserToGroup(groupId, userJid) {
+async function ensureUserInGroup(groupId, userJid) {
+    console.log(`[WA_BOT_TRACE] ensureUserInGroup entry. Group: ${groupId}, JID: ${userJid}`);
     if (!waSock || waStatus !== 'connected') {
-        console.error('[WA_SERVICE] Cannot add to group: not connected');
-        return false;
+        console.error('[WA_SERVICE] Cannot ensure user in group: not connected');
+        return { added: false, alreadyMember: false, error: 'not connected' };
     }
 
     try {
-        await waSock.groupParticipantsUpdate(groupId, [userJid], 'add');
-        console.log(`[WA_SERVICE] Added user to group ${groupId}`);
-        return true;
+        // 1. Check if user is already in group
+        const groupMetadata = await waSock.groupMetadata(groupId);
+        const participants = groupMetadata.participants || [];
+
+        const userNumber = userJid.split('@')[0].replace(/\D/g, '');
+        console.log(`[WA_BOT_TRACE] Checking if ${userNumber} is in group of ${participants.length} participants`);
+
+        const isMember = participants.some(p => {
+            const pNumber = p.id.split('@')[0].split(':')[0].replace(/\D/g, '');
+            const pLid = p.lid ? p.lid.split('@')[0].split(':')[0].replace(/\D/g, '') : null;
+
+            const match = pNumber === userNumber || (pLid && pLid === userNumber);
+            if (match) {
+                console.log(`[WA_BOT_TRACE] Match found: pNumber=${pNumber}, pLid=${pLid} vs userNumber=${userNumber}`);
+            }
+            return match;
+        });
+
+        if (isMember) {
+            console.log(`[WA_BOT_TRACE] User ${userNumber} is already in group ${groupId}`);
+            return { added: false, alreadyMember: true };
+        }
+
+        // 2. Add if not present
+        console.log(`[WA_BOT_TRACE] Adding missing user ${userNumber} to group...`);
+        const response = await waSock.groupParticipantsUpdate(groupId, [userJid], 'add');
+        console.log(`[WA_BOT_TRACE] Baileys Response:`, JSON.stringify(response));
+
+        // Response is usually array of { jid, status, error? }
+        return { added: true, alreadyMember: false };
+
     } catch (error) {
-        console.error('[WA_SERVICE] Error adding to group:', error.message);
-        return false;
+        console.error(`[WA_SERVICE] Error ensuring user in group:`, error.message);
+        return { added: false, alreadyMember: false, error: error.message };
+    }
+}
+
+/**
+ * Agrega un usuario a un grupo de WhatsApp (Wrapper simple)
+ */
+async function addUserToGroup(groupId, userJid) {
+    return ensureUserInGroup(groupId, userJid);
+}
+
+/**
+ * Sincroniza los participantes del grupo con la base de datos
+ * @param {Object} io - Socket.io instance
+ * @param {string} groupId - ID del grupo
+ */
+async function syncGroupParticipants(io, groupId) {
+    if (!waSock || waStatus !== 'connected') {
+        io.emit('adminError', 'Bot desconectado. No se puede sincronizar.');
+        return;
+    }
+
+    try {
+        console.log('[WA_SYNC] Starting group sync...');
+        io.emit('adminSyncStatus', { status: 'loading', message: 'Analizando participantes...' });
+
+        // 1. Fetch group participants (Normalization)
+        const groupMetadata = await waSock.groupMetadata(groupId);
+        const existingNumbers = new Set(
+            groupMetadata.participants.map(p => p.id.split('@')[0].split(':')[0].replace(/\D/g, ''))
+        );
+        console.log(`[WA_SYNC] Found ${existingNumbers.size} unique participants in group.`);
+
+        // 2. Fetch all users from DB
+        const { supabase } = require('../../lib/supabase-server');
+        const { data: profiles, error } = await supabase
+            .from('profiles')
+            .select('id, username, phone_number')
+            .not('phone_number', 'is', null)
+            .neq('phone_number', ''); // Also ignore empty strings
+
+        if (error) throw error;
+        console.log(`[WA_SYNC] Found ${profiles?.length || 0} profiles total in DB with phone numbers.`);
+        if (profiles) {
+            profiles.forEach(p => console.log(`[WA_SYNC_DEBUG] DB Profile: ${p.username} | Phone: ${p.phone_number}`));
+        }
+
+        // 3. Find missing users
+        const botNumber = waSock.user.id.split(':')[0].split('@')[0];
+        const botLid = waSock.user.lid ? waSock.user.lid.split(':')[0].split('@')[0] : null;
+
+        const missingUsers = profiles.filter(p => {
+            if (!p.phone_number) return false;
+            const dbNumber = p.phone_number.replace(/\D/g, '');
+
+            // IGNORE THE BOT ITSELF
+            if (dbNumber === botNumber || (botLid && dbNumber === botLid)) {
+                return false;
+            }
+
+            // Valid length check (e.g. at least 7 digits)
+            if (dbNumber.length < 7) return false;
+            return !existingNumbers.has(dbNumber);
+        });
+
+        console.log(`[WA_SYNC] Found ${missingUsers.length} missing users (will attempt to add).`);
+
+        if (missingUsers.length === 0) {
+            io.emit('adminSyncStatus', { status: 'complete', message: '¡Sincronización al día! No hay usuarios faltantes.' });
+            return;
+        }
+
+        io.emit('adminSyncStatus', { status: 'progress', total: missingUsers.length, current: 0, message: `Faltan ${missingUsers.length} usuarios. Iniciando...` });
+
+        // 4. Add users with delay
+        let addedCount = 0;
+        for (const user of missingUsers) {
+            const cleanPhone = user.phone_number.replace(/\D/g, '');
+            const jid = `${cleanPhone}@s.whatsapp.net`;
+
+            try {
+                // Double check before adding (redundancy)
+                const result = await ensureUserInGroup(groupId, jid);
+                if (result.added || result.alreadyMember) {
+                    addedCount++;
+                    io.emit('adminSyncStatus', {
+                        status: 'progress',
+                        total: missingUsers.length,
+                        current: addedCount,
+                        message: result.added ? `Agregado: ${user.username}` : `Verificado: ${user.username}`
+                    });
+
+                    // If they WERE actually added (not already there), let's send them a welcome DM too!
+                    if (result.added) {
+                        const welcomeMsg = `¡Hola *${user.username}*! 👋 Te acabamos de agregar al grupo oficial de Piedra.fun.\n\n¡Bienvenido! 🚀🪙`;
+                        await sendHumanizedMessage(jid, welcomeMsg);
+                    }
+                } else {
+                    console.warn(`[WA_SYNC] Could not verify/add user: ${user.username}`, result.error);
+                }
+
+                // Human delay (3-7s) to avoid ban - fast enough but safe
+                const delay = Math.floor(Math.random() * 4000) + 3000;
+                await new Promise(r => setTimeout(r, delay));
+
+            } catch (err) {
+                console.error(`[WA_SYNC] Failed to process ${user.username}:`, err.message);
+            }
+        }
+
+        io.emit('adminSyncStatus', { status: 'complete', message: `Sincronización finalizada.` });
+
+    } catch (error) {
+        console.error('[WA_SYNC] Error:', error.message);
+        io.emit('adminError', 'Error crítico en sincronización: ' + error.message);
+        io.emit('adminSyncStatus', { status: 'error', message: 'Fallo la sincronización' });
     }
 }
 
@@ -212,12 +371,15 @@ function getStatus() { return waStatus; }
 function getQr() { return waQr; }
 function getGroups() { return waGroups; }
 
+
 module.exports = {
     connectToWhatsApp,
     sendHumanizedMessage,
     sendMessageWithTyping,
     fetchBotGroups,
     addUserToGroup,
+    ensureUserInGroup, // New export
+    syncGroupParticipants,
     loadWaDependencies,
     getSocket,
     getStatus,

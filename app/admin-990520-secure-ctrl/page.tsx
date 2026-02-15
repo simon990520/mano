@@ -54,6 +54,7 @@ export default function AdminDashboard() {
         whatsapp_group_id: '',
         ai_faq_prompt: ''
     });
+    const [syncStatus, setSyncStatus] = useState({ status: 'idle', message: '', total: 0, current: 0 });
 
     useEffect(() => {
         setMounted(true);
@@ -137,6 +138,13 @@ export default function AdminDashboard() {
 
             socketInstance.on('adminError', (msg) => {
                 alert('❌ Error de Servidor: ' + msg);
+            });
+
+            socketInstance.on('adminSyncStatus', (data) => {
+                setSyncStatus(prev => ({ ...prev, ...data }));
+                if (data.status === 'complete') {
+                    setTimeout(() => setSyncStatus({ status: 'idle', message: '', total: 0, current: 0 }), 5000);
+                }
             });
 
             // Bot Control Listeners
@@ -244,6 +252,12 @@ export default function AdminDashboard() {
     const handleWaReconnect = () => {
         if (!socketRef.current) return;
         socketRef.current.emit('waReconnect');
+    };
+
+    const handleSyncGroup = () => {
+        if (!socketRef.current || !appSettingsState.whatsapp_group_id) return;
+        setSyncStatus({ status: 'loading', message: 'Iniciando...', total: 0, current: 0 });
+        socketRef.current.emit('syncWaGroup', { groupId: appSettingsState.whatsapp_group_id });
     };
 
     // Load bot config when switching to bot control view
@@ -508,6 +522,31 @@ export default function AdminDashboard() {
                                 {waGroups.length === 0 && waStatus === 'connected' && <p style={{ fontSize: '0.7rem', color: colors.textMuted, marginTop: '6px' }}>No se encontraron grupos.</p>}
                                 {appSettingsState.whatsapp_group_id && waGroups.find(g => g.id === appSettingsState.whatsapp_group_id && !g.isAdmin) && (
                                     <p style={{ fontSize: '0.7rem', color: colors.danger, marginTop: '6px', fontWeight: 800 }}>⚠️ El bot no es admin en este grupo. Las invitaciones fallarán.</p>
+                                )}
+
+                                {appSettingsState.whatsapp_group_id && (
+                                    <div style={{ marginTop: '12px' }}>
+                                        <button
+                                            onClick={handleSyncGroup}
+                                            disabled={syncStatus.status !== 'idle' && syncStatus.status !== 'complete'}
+                                            style={{ width: '100%', padding: '12px', borderRadius: '12px', background: colors.cardSecondary, border: `2px solid ${colors.primary}`, color: colors.primary, fontWeight: 900, cursor: 'pointer', opacity: syncStatus.status !== 'idle' ? 0.7 : 1 }}
+                                        >
+                                            {syncStatus.status === 'idle' ? '🔄 SINCRONIZAR INTEGRANTES' : '⏳ SINCRONIZANDO...'}
+                                        </button>
+                                        {syncStatus.status !== 'idle' && (
+                                            <div style={{ marginTop: '8px' }}>
+                                                <p style={{ fontSize: '0.75rem', color: colors.textMuted, marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                                                    <span>{syncStatus.message}</span>
+                                                    {syncStatus.total > 0 && <span>{Math.round((syncStatus.current / syncStatus.total) * 100)}%</span>}
+                                                </p>
+                                                {syncStatus.total > 0 && (
+                                                    <div style={{ width: '100%', height: '6px', backgroundColor: colors.cardBorder, borderRadius: '3px', overflow: 'hidden' }}>
+                                                        <div style={{ width: `${(syncStatus.current / syncStatus.total) * 100}%`, height: '100%', backgroundColor: colors.accent, transition: 'width 0.3s ease' }}></div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                             <div>
