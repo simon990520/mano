@@ -98,6 +98,17 @@ async function connectToWhatsApp(io) {
         }
     });
 
+    waSock.ev.on('messages.upsert', async (m) => {
+        if (m.type === 'notify') {
+            for (const msg of m.messages) {
+                if (!msg.key.fromMe) {
+                    const { handleIncomingWaMessage } = require('../controllers/whatsappController');
+                    await handleIncomingWaMessage(msg);
+                }
+            }
+        }
+    });
+
     waSock.ev.on('creds.update', saveCreds);
 
     return waSock;
@@ -213,6 +224,16 @@ async function ensureUserInGroup(groupId, userJid) {
     }
 
     try {
+        // 0. Verify if bot is admin in this group
+        const groupList = getGroups();
+        const targetGroup = groupList.find(g => g.id === groupId);
+        console.log(`[WA_BOT_TRACE] ensureUserInGroup: Target group found: ${!!targetGroup}, Bot is admin: ${targetGroup?.isAdmin}`);
+
+        if (targetGroup && !targetGroup.isAdmin) {
+            console.warn(`[WA_BOT_TRACE] Bot is NOT admin in group ${groupId}. Cannot add users.`);
+            return { added: false, alreadyMember: false, error: 'bot not admin' };
+        }
+
         // 1. Check if user is already in group
         const groupMetadata = await waSock.groupMetadata(groupId);
         const participants = groupMetadata.participants || [];
@@ -238,14 +259,37 @@ async function ensureUserInGroup(groupId, userJid) {
 
         // 2. Add if not present
         console.log(`[WA_BOT_TRACE] Adding missing user ${userNumber} to group...`);
-        const response = await waSock.groupParticipantsUpdate(groupId, [userJid], 'add');
-        console.log(`[WA_BOT_TRACE] Baileys Response:`, JSON.stringify(response));
+        try {
+            const response = await waSock.groupParticipantsUpdate(groupId, [userJid], 'add');
+            console.log(`[WA_BOT_TRACE] Baileys Response:`, JSON.stringify(response));
 
-        // Response is usually array of { jid, status, error? }
-        return { added: true, alreadyMember: false };
+            // Check if Baileys returned a failure inside the response array
+            const participantResult = response[0];
+            if (participantResult && participantResult.status >= 400) {
+                throw new Error(`Baileys status code: ${participantResult.status}`);
+            }
+
+            return { added: true, alreadyMember: false };
+        } catch (addErr) {
+            console.warn(`[WA_BOT_TRACE] Direct add failed for ${userNumber}:`, addErr.message);
+
+            // FALLBACK: If direct add fails (often privacy settings), try to send invite link
+            if (addErr.message.includes('403') || addErr.message.includes('bad-request') || addErr.message.includes('not-authorized')) {
+                try {
+                    console.log(`[WA_BOT_TRACE] Attempting invite link fallback for ${userNumber}...`);
+                    const code = await waSock.groupInviteCode(groupId);
+                    const inviteMsg = `¡Hola! 👋 Quise agregarte al grupo oficial de Piedra.fun pero tu configuración de privacidad no me lo permitió.\n\nÚnete aquí: https://chat.whatsapp.com/${code}`;
+                    await sendHumanizedMessage(userJid, inviteMsg);
+                    return { added: true, alreadyMember: false, fallbackInvite: true };
+                } catch (inviteErr) {
+                    console.error('[WA_BOT_TRACE] Invite link fallback also failed:', inviteErr.message);
+                }
+            }
+            throw addErr; // Re-throw to be caught by the outer catch
+        }
 
     } catch (error) {
-        console.error(`[WA_SERVICE] Error ensuring user in group:`, error.message);
+        console.error(`[WA_BOT_TRACE] Error ensuring user in group:`, error.message);
         return { added: false, alreadyMember: false, error: error.message };
     }
 }
@@ -335,20 +379,25 @@ async function syncGroupParticipants(io, groupId) {
                         status: 'progress',
                         total: missingUsers.length,
                         current: addedCount,
-                        message: result.added ? `Agregado: ${user.username}` : `Verificado: ${user.username}`
+                        message: result.added ? (result.fallbackInvite ? `Invitación enviada: ${user.username}` : `Agregado: ${user.username}`) : `Verificado: ${user.username}`
                     });
 
                     // If they WERE actually added (not already there), let's send them a welcome DM too!
-                    if (result.added) {
+                    if (result.added && !result.fallbackInvite) {
                         const welcomeMsg = `¡Hola *${user.username}*! 👋 Te acabamos de agregar al grupo oficial de Piedra.fun.\n\n¡Bienvenido! 🚀🪙`;
                         await sendHumanizedMessage(jid, welcomeMsg);
                     }
                 } else {
                     console.warn(`[WA_SYNC] Could not verify/add user: ${user.username}`, result.error);
+
+                    if (result.error?.includes('rate-overlimit')) {
+                        io.emit('adminSyncStatus', { status: 'error', message: 'Límite de velocidad de WhatsApp alcanzado. Espera unos minutos.' });
+                        return; // Stop the sync loop
+                    }
                 }
 
-                // Human delay (3-7s) to avoid ban - fast enough but safe
-                const delay = Math.floor(Math.random() * 4000) + 3000;
+                // Human delay (5-10s) - Increased to avoid further rate-overlimit
+                const delay = Math.floor(Math.random() * 5000) + 5000;
                 await new Promise(r => setTimeout(r, delay));
 
             } catch (err) {

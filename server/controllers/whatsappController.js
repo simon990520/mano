@@ -25,16 +25,25 @@ const { appSettings } = require('../utils/constants');
  */
 async function handleIncomingWaMessage(msg) {
     const sender = msg.key.remoteJid;
-    const body = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
+    const body = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.quotedMessage?.conversation;
+    
+    console.log(`[WA_BOT_TRACE] Incoming message from ${sender}. Body: ${body?.substring(0, 50)}...`);
 
-    const result = await processIncomingMessage({ sender, body });
+    if (!body) {
+        console.log('[WA_BOT_TRACE] Message body is empty or type not supported, ignoring.');
+        return;
+    }
 
-    if (result.shouldRespond && result.response) {
-        try {
+    try {
+        const result = await processIncomingMessage({ sender, body });
+        console.log(`[WA_BOT_TRACE] AI Result for ${sender}: shouldRespond=${result.shouldRespond}, responseLen=${result.response?.length}`);
+
+        if (result.shouldRespond && result.response) {
             await sendMessageWithTyping(sender, result.response);
-        } catch (err) {
-            console.error('[WA_CONTROLLER] Error sending response:', err.message);
+            console.log(`[WA_BOT_TRACE] Response sent to ${sender}`);
         }
+    } catch (err) {
+        console.error('[WA_BOT_TRACE] Error in handleIncomingWaMessage:', err.message);
     }
 }
 

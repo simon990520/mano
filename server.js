@@ -13,7 +13,7 @@ const { activeRooms, createRoom, findRoomById } = require('./game/roomManager');
 const { getBotChoice, createBotProfile } = require('./lib/bot-engine');
 
 // MVC MODULES
-const { isAdmin, sanitizeInput, validatePhoneNumber } = require('./server/utils/security');
+const { isAdmin, sanitizeInput, validatePhoneNumber, ALLOWED_STAKES } = require('./server/utils/security');
 const { botConfig, appSettings, botArenaConfigs, botArenaStats, bonusClaimLock, updateBotConfig, updateAppSettings, updateBotArenaConfigs, updateBotArenaStats } = require('./server/utils/constants');
 const { connectToWhatsApp, getStatus, getQr } = require('./server/services/whatsappService');
 const { handleIncomingWaMessage, sendWelcomeMessage, registerWhatsappHandlers } = require('./server/controllers/whatsappController');
