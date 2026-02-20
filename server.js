@@ -5,7 +5,17 @@ const next = require('next');
 const { Server } = require('socket.io');
 const crypto = require('crypto');
 
-const { supabase, processEntryFee, refundEntryFee, processEntryFeeAtomic, recordMatch, incrementPlayerStats } = require('./lib/supabase-server');
+const {
+    supabase,
+    processEntryFee,
+    refundEntryFee,
+    processEntryFeeAtomic,
+    recordMatch,
+    incrementPlayerStats,
+    getFriendships,
+    sendFriendRequest,
+    updateFriendshipStatus
+} = require('./lib/supabase-server');
 const { clerkClient, authMiddleware } = require('./lib/clerk-server');
 const { determineWinner, getRankByRp } = require('./game/engine');
 const { waitingPlayers, waitingRanked, createPlayer, removeFromQueue } = require('./game/matchmaker');
@@ -249,26 +259,43 @@ app.prepare().then(() => {
     io.use(authMiddleware);
     process.io = io; // Expose io for Bold Webhook access
 
-    io.on('connection', (socket) => {
-        const userId = socket.userId;
-        console.log('[SERVER_INFO] Player connected:', socket.id, 'User:', userId);
+    // Helper to update online status
+    async function updateOnlineStatus(userId, isOnline) {
+        try {
+            await supabase
+                .from('profiles')
+                .update({
+                    is_online: isOnline,
+                    last_seen: new Date().toISOString()
+                })
+                .eq('id', userId);
 
-        // Send public configuration upon connection
-        socket.emit('botConfigUpdated', botConfig);
+            // Notify friends
+            const friendships = await getFriendships(userId);
+            friendships.forEach(f => {
+                const friendId = f.user_id_1 === userId ? f.user_id_2 : f.user_id_1;
+                const friendSocketId = userSockets.get(friendId);
+                if (friendSocketId) {
+                    io.to(friendSocketId).emit('friendStatusChanged', { userId, isOnline });
+                }
+            });
+        } catch (err) {
+            console.error('[STATUS_SYNC] Error:', err.message);
+        }
+    }
+
+    io.on('connection', async (socket) => {
+        const userId = socket.userId;
+        console.log(`[SERVER_INFO] New connection from ${userId} (${socket.id})`);
+
+        // Initial status update moved to the end to prevent registration race conditions
+
+        // Profile fetch moved to the end
 
         // Register WhatsApp Admin Handlers
         registerWhatsappHandlers(io, socket, userId, isAdmin);
 
-        if (userSockets.has(userId)) {
-            const oldSocketId = userSockets.get(userId);
-            const oldSocket = io.sockets.sockets.get(oldSocketId);
-            if (oldSocket) {
-                console.log(`[SESSION_SECURITY] Disconnecting old session for ${userId}. New session: ${socket.id}, Old: ${oldSocketId}`);
-                oldSocket.disconnect();
-            } else {
-                console.log(`[SESSION_SECURITY] Old socket ID ${oldSocketId} found for ${userId} but it's already stale.`);
-            }
-        }
+        // Session sync moved to the end
         userSockets.set(userId, socket.id);
 
         socket.on('updateProfile', async (data) => {
@@ -356,6 +383,7 @@ app.prepare().then(() => {
                     socket.emit('profileUpdateError', error.message);
                 } else {
                     console.log(`[SERVER_DB] Profile updated for ${userId}. Coins: ${finalCoins}, Gems: ${finalGems}`);
+                    if (username) socket.username = username; // Update cache
                     socket.emit('profileUpdated', { coins: finalCoins, gems: finalGems });
                 }
             } catch (err) {
@@ -675,7 +703,7 @@ app.prepare().then(() => {
             }
 
             try {
-                const { data: profile, error } = await supabase.from('profiles').select('coins, gems, rp').eq('id', userId).single();
+                const { data: profile, error } = await supabase.from('profiles').select('coins, gems, rp, username').eq('id', userId).single();
                 if (error) throw error;
 
                 let currentStake = stakeTier;
@@ -761,7 +789,8 @@ app.prepare().then(() => {
                     (Object.values(waitingRanked).flat().some(p => p.userId === userId));
                 if (isWaiting) return;
 
-                const player = createPlayer(socket.id, userId, imageUrl);
+                socket.username = profile.username; // Cache for other events
+                const player = createPlayer(socket.id, userId, imageUrl, profile.username);
                 player.mode = mode;
                 player.stakeTier = currentStake;
                 player.rank = currentRank;
@@ -790,8 +819,8 @@ app.prepare().then(() => {
                         return;
                     }
 
-                    socket.emit('matchFound', { roomId: room.id, playerIndex: 0, opponentId: opponent.userId, opponentImageUrl: opponent.imageUrl, stakeTier: currentStake, mode, rank: currentRank });
-                    io.to(opponent.socketId).emit('matchFound', { roomId: room.id, playerIndex: 1, opponentId: player.userId, opponentImageUrl: player.imageUrl, stakeTier: currentStake, mode, rank: currentRank });
+                    socket.emit('matchFound', { roomId: room.id, playerIndex: 0, opponentId: opponent.userId, opponentUsername: opponent.username, opponentImageUrl: opponent.imageUrl, stakeTier: currentStake, mode, rank: currentRank });
+                    io.to(opponent.socketId).emit('matchFound', { roomId: room.id, playerIndex: 1, opponentId: player.userId, opponentUsername: player.username, opponentImageUrl: player.imageUrl, stakeTier: currentStake, mode, rank: currentRank });
 
                     setTimeout(() => startCountdown(room.id), 1000);
                 } else {
@@ -863,6 +892,7 @@ app.prepare().then(() => {
                                     roomId: room.id,
                                     playerIndex: 0,
                                     opponentId: botProfile.id,
+                                    opponentUsername: botProfile.username,
                                     opponentImageUrl: null,
                                     stakeTier: currentStake,
                                     mode,
@@ -998,24 +1028,191 @@ app.prepare().then(() => {
                     room.winner = null;
                     room.rematchRequested = false;
                     room.rematchRequestedBy = null;
-                    room.stats = {
-                        [room.players[0].userId]: { rock: 0, paper: 0, scissors: 0, openings: { rock: 0, paper: 0, scissors: 0 } },
-                        [room.players[1].userId]: { rock: 0, paper: 0, scissors: 0, openings: { rock: 0, paper: 0, scissors: 0 } }
-                    };
+                    room.botReplied = false;
+
+                    io.to(room.id).emit('roomUpdated', room);
                     startCountdown(room.id);
-                }, 2000);
-            } else {
-                if (requesterSocket) io.to(requesterSocket).emit('rematchDeclined');
-                if (opponentSocket) io.to(opponentSocket).emit('rematchDeclined');
-                setTimeout(() => {
-                    activeRooms.delete(room.players[0].socketId);
-                    activeRooms.delete(room.players[1].socketId);
                 }, 2000);
             }
         });
 
-        socket.on('disconnect', () => {
+        // ============ SOCIAL & FRIENDSHIP EVENTS ============
+
+        socket.on('getFriends', async () => {
+            console.log(`[TRACE] getFriends called by ${userId} on socket ${socket.id}`);
+            const friends = await getFriendships(userId);
+            console.log(`[TRACE] getFriendships returned ${friends.length} items for ${userId}`);
+            socket.emit('friendsList', friends);
+            console.log(`[TRACE] friendsList emitted to ${socket.id}`);
+        });
+
+        socket.on('sendFriendRequest', async (targetUsername) => {
+            try {
+                // Find user by username
+                const { data: targetUser } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .eq('username', targetUsername)
+                    .maybeSingle();
+
+                if (!targetUser) return socket.emit('socialError', 'Usuario no encontrado.');
+                if (targetUser.id === userId) return socket.emit('socialError', 'No puedes agregarte a ti mismo.');
+
+                const result = await sendFriendRequest(userId, targetUser.id);
+                if (result.success) {
+                    socket.emit('socialSuccess', 'Solicitud enviada.');
+                    // Notify target if online
+                    const targetSocketId = userSockets.get(targetUser.id);
+                    if (targetSocketId) {
+                        io.to(targetSocketId).emit('newFriendRequest', { fromId: userId, fromUsername: socket.username });
+                    }
+                } else {
+                    socket.emit('socialError', result.error);
+                }
+            } catch (err) {
+                socket.emit('socialError', 'Error al enviar solicitud.');
+            }
+        });
+
+        socket.on('respondToFriendRequest', async ({ friendshipId, accept }) => {
+            try {
+                const { data: friendship, error: fetchErr } = await supabase
+                    .from('friendships')
+                    .select('*')
+                    .eq('id', friendshipId)
+                    .single();
+
+                if (fetchErr || !friendship) return socket.emit('socialError', 'Solicitud no encontrada.');
+
+                const isSender = friendship.user_id_1 === userId;
+                const isRecipient = friendship.user_id_2 === userId;
+
+                if (!isSender && !isRecipient) {
+                    return socket.emit('socialError', 'No tienes permiso para realizar esta acción.');
+                }
+
+                if (friendship.status !== 'pending') {
+                    return socket.emit('socialError', 'Esta solicitud ya ha sido procesada.');
+                }
+
+                // If sender, they can only cancel (accept=false)
+                if (isSender && accept) {
+                    return socket.emit('socialError', 'No puedes aceptar tu propia solicitud.');
+                }
+
+                const status = accept ? 'accepted' : 'rejected';
+                console.log(`[SOCIAL] Response for ${friendshipId}: ${status}`);
+                const result = await updateFriendshipStatus(friendshipId, status);
+
+                if (result.success) {
+                    socket.emit('socialSuccess', accept ? 'Amigo agregado.' : 'Solicitud rechazada.');
+                    const otherId = friendship.user_id_1 === userId ? friendship.user_id_2 : friendship.user_id_1;
+                    const otherSocketId = userSockets.get(otherId);
+                    socket.emit('friendsList', await getFriendships(userId));
+                    if (otherSocketId) io.to(otherSocketId).emit('friendsList', await getFriendships(otherId));
+                } else {
+                    console.error(`[SOCIAL] Update error: ${result.error}`);
+                    socket.emit('socialError', 'Error al procesar respuesta.');
+                }
+            } catch (err) {
+                console.error(`[SOCIAL] Exception:`, err);
+                socket.emit('socialError', 'Error interno.');
+            }
+        });
+
+        socket.on('searchUsers', async (query) => {
+            if (!query || query.length < 2) return socket.emit('searchResult', []);
+            try {
+                console.log(`[SOCIAL_SEARCH] Searching for: "${query}" (User: ${userId})`);
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('id, username')
+                    .ilike('username', `%${query}%`)
+                    .neq('id', userId)
+                    .limit(5);
+                if (error) throw error;
+                console.log(`[SOCIAL_SEARCH] Results found: ${data ? data.length : 0}`);
+                socket.emit('searchResult', data || []);
+            } catch (err) {
+                console.error(`[SOCIAL_SEARCH] Error:`, err.message);
+                socket.emit('searchResult', []);
+            }
+        });
+
+        socket.on('challengeFriend', async ({ friendId, stakeTier, mode }) => {
+            console.log(`[SOCIAL_CHALLENGE] From ${userId} to ${friendId}, stake: ${stakeTier}, mode: ${mode}`);
+            // Validate balance first
+            const { data: profile } = await supabase.from('profiles').select('coins, gems').eq('id', userId).single();
+            const currency = mode === 'casual' ? 'coins' : 'gems';
+            if (!profile || profile[currency] < stakeTier) {
+                return socket.emit('matchError', `Saldo insuficiente para apostar ${stakeTier} ${currency}.`);
+            }
+
+            const targetSocketId = userSockets.get(friendId);
+            if (!targetSocketId) return socket.emit('socialError', 'El amigo no está conectado.');
+
+            // Send invite
+            io.to(targetSocketId).emit('incomingChallenge', {
+                fromId: userId,
+                fromUsername: socket.username,
+                stakeTier,
+                mode
+            });
+            socket.emit('socialSuccess', 'Desafío enviado.');
+        });
+
+        socket.on('acceptChallenge', async ({ challengerId, stakeTier, mode }) => {
+            const challengerSocketId = userSockets.get(challengerId);
+            if (!challengerSocketId) return socket.emit('matchError', 'El retador se desconectó.');
+
+            const challengerSocket = io.sockets.sockets.get(challengerSocketId);
+            if (!challengerSocket) return socket.emit('matchError', 'Error de conexión con el retador.');
+
+            // Check receiver balance
+            const { data: profile } = await supabase.from('profiles').select('coins, gems').eq('id', userId).single();
+            const currency = mode === 'casual' ? 'coins' : 'gems';
+            if (!profile || profile[currency] < stakeTier) {
+                return socket.emit('matchError', `Saldo insuficiente.`);
+            }
+
+            // Create Private Room
+            const player1 = createPlayer(challengerSocketId, challengerId, null);
+            const player2 = createPlayer(socket.id, userId, null);
+
+            player1.mode = mode;
+            player1.stakeTier = stakeTier;
+            player2.mode = mode;
+            player2.stakeTier = stakeTier;
+
+            const room = createRoom(player1, player2);
+            room.mode = mode;
+            room.stakeTier = stakeTier;
+
+            activeRooms.set(socket.id, room);
+            activeRooms.set(challengerSocketId, room);
+            socket.join(room.id);
+            challengerSocket.join(room.id);
+
+            const feeResult = await processEntryFeeAtomic([player1, player2], mode, stakeTier);
+            if (!feeResult.success) {
+                socket.emit('matchError', 'Depósito fallido.');
+                challengerSocket.emit('matchError', 'Depósito fallido.');
+                return;
+            }
+
+            socket.emit('matchFound', { roomId: room.id, playerIndex: 1, opponentId: challengerId, opponentUsername: challengerSocket.username, stakeTier, mode });
+            challengerSocket.emit('matchFound', { roomId: room.id, playerIndex: 0, opponentId: userId, opponentUsername: socket.username, stakeTier, mode });
+
+            setTimeout(() => startCountdown(room.id), 1000);
+        });
+
+        socket.on('disconnect', async () => {
+            console.log('[SERVER_INFO] Player disconnected:', socket.id);
             if (userSockets.get(userId) === socket.id) userSockets.delete(userId);
+
+            // Set status to offline
+            await updateOnlineStatus(userId, false);
+
             removeFromQueue(socket.id, userId);
 
             const room = activeRooms.get(socket.id);
@@ -1101,6 +1298,33 @@ app.prepare().then(() => {
                 socket.emit('playerStatsData', { ...profile, ranked_stats: stats ? { matches: stats.matches_played, wins: stats.wins, rock: stats.rock_count, paper: stats.paper_count, scissors: stats.scissors_count, openings: { rock: stats.opening_rock, paper: stats.opening_paper, scissors: stats.opening_scissors } } : null });
             } catch (err) { }
         });
+
+        // 4. Final Async Initialization (Post-registration to prevent race conditions)
+        (async () => {
+            try {
+                // Set status to online
+                await updateOnlineStatus(userId, true);
+
+                // Send public configuration
+                socket.emit('botConfigUpdated', botConfig);
+
+                // Fetch and cache username
+                const { data: profile } = await supabase.from('profiles').select('username').eq('id', userId).single();
+                if (profile) socket.username = profile.username;
+
+                // Handle old sessions cleanup
+                const oldSocketId = userSockets.get(userId);
+                if (oldSocketId && oldSocketId !== socket.id) {
+                    const oldSocket = io.sockets.sockets.get(oldSocketId);
+                    if (oldSocket) {
+                        console.log(`[SESSION_SECURITY] Syncing session for ${userId}. Disconnecting ${oldSocketId}`);
+                        oldSocket.disconnect();
+                    }
+                }
+            } catch (initErr) {
+                console.error('[CONNECTION_INIT] Error:', initErr);
+            }
+        })();
     });
 
     function startCountdown(roomId) {
