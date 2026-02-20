@@ -56,7 +56,6 @@ import { ClerkProvider } from '@clerk/nextjs'
 import { dark } from '@clerk/themes'
 import Script from 'next/script'
 
-import GoogleAdsense from './components/GoogleAdsense'
 
 export default function RootLayout({
     children,
@@ -89,7 +88,6 @@ export default function RootLayout({
                     </noscript>
                     {/* End Google Tag Manager (noscript) */}
                     {children}
-                    <GoogleAdsense />
                     <script src="https://checkout.bold.co/library/boldPaymentButton.js"></script>
                 </body>
             </html>

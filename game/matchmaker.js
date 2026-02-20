@@ -16,12 +16,13 @@ const waitingRanked = {
     'LEYENDA': []
 };
 
-function createPlayer(socketId, userId, imageUrl) {
+function createPlayer(socketId, userId, imageUrl, username = null) {
     return {
         id: crypto.randomUUID(),
         userId,
         socketId,
         imageUrl,
+        username,
         score: 0,
         choice: null,
         ready: true

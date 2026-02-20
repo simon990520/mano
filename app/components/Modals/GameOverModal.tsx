@@ -10,6 +10,10 @@ interface GameOverModalProps {
     onGoToLobby: () => void;
     onRematchResponse: (accept: boolean) => void;
 
+    // Social
+    onAddFriend?: (username: string) => void;
+    opponentUsername?: string;
+
     // Reward Data
     showRewardAnim: boolean;
     rewardData: { type: 'coins' | 'gems' | 'rp', amount: number, isWin: boolean } | null;
@@ -26,7 +30,9 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
     onRematchResponse,
     showRewardAnim,
     rewardData,
-    inactivityRefund = false
+    inactivityRefund = false,
+    onAddFriend,
+    opponentUsername
 }) => {
     const isTie = gameWinner === 'tie';
     const isVictory = gameWinner === 'player';
@@ -93,6 +99,31 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                     MENÚ
                 </button>
             </div>
+
+            {opponentUsername && onAddFriend && (
+                <div style={{ marginTop: '15px' }}>
+                    <button
+                        onClick={() => onAddFriend(opponentUsername)}
+                        style={{
+                            padding: '10px 20px',
+                            background: 'rgba(234, 179, 8, 0.1)',
+                            border: '1px solid rgba(234, 179, 8, 0.3)',
+                            borderRadius: '12px',
+                            color: '#eab308',
+                            fontSize: '0.85rem',
+                            fontWeight: 'bold',
+                            textTransform: 'uppercase',
+                            letterSpacing: '1px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.background = 'rgba(234, 179, 8, 0.2)'}
+                        onMouseOut={(e) => e.currentTarget.style.background = 'rgba(234, 179, 8, 0.1)'}
+                    >
+                        👤 Agregar a {opponentUsername}
+                    </button>
+                </div>
+            )}
 
             {rematchStatus && (
                 <div className="rematch-status" style={{ marginTop: '20px', color: 'var(--primary)', fontWeight: 600 }}>

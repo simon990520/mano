@@ -45,3 +45,20 @@ export interface GameOverData {
     newCoins?: number;
     newGems?: number;
 }
+
+export interface SocialProfile {
+    id: string;
+    username: string;
+    is_online: boolean;
+    last_seen: string;
+    imageUrl?: string;
+}
+
+export interface Friendship {
+    id: string;
+    status: 'pending' | 'accepted' | 'blocked';
+    user_id_1: string;
+    user_id_2: string;
+    profiles_1: SocialProfile;
+    profiles_2: SocialProfile;
+}

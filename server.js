@@ -367,7 +367,6 @@ app.prepare().then(() => {
                 const phoneChanged = phone_number && (phone_number !== existing?.phone_number);
                 console.log(`[WA_BOT_TRACE] Profile Update Logic. error: ${!!error}, isNew: ${isNewOnboarding}, phoneChanged: ${phoneChanged}, phone: ${phone_number}, Status: ${getStatus()}`);
 
-                // Trigger welcome if phone is new/changed OR if it's the very first onboarding
                 if (!error && phone_number && (isNewOnboarding || phoneChanged) && getStatus() === 'connected') {
                     try {
                         console.log(`[WA_BOT_TRACE] Triggering sendWelcomeMessage for ${username} (${phone_number})`);
@@ -379,8 +378,19 @@ app.prepare().then(() => {
                 }
 
                 if (error) {
-                    console.error('[SERVER_DB] Profile update error:', error.message);
-                    socket.emit('profileUpdateError', error.message);
+                    console.error('[SERVER_DB] Profile update error:', error.message, error.code);
+                    let userMsg = error.message;
+                    // Catch unique violation (duplicate key)
+                    if (error.code === '23505') {
+                        if (error.message.includes('phone_number')) {
+                            userMsg = 'Este número de teléfono ya está en uso por otro usuario. Por favor intenta con un número diferente.';
+                        } else if (error.message.includes('username')) {
+                            userMsg = 'Este nombre de usuario ya está siendo usado por otra persona.';
+                        } else {
+                            userMsg = 'Ya existe un usuario con estos datos únicos. Por favor verifica tu información.';
+                        }
+                    }
+                    socket.emit('profileUpdateError', userMsg);
                 } else {
                     console.log(`[SERVER_DB] Profile updated for ${userId}. Coins: ${finalCoins}, Gems: ${finalGems}`);
                     if (username) socket.username = username; // Update cache
@@ -1100,19 +1110,37 @@ app.prepare().then(() => {
                     return socket.emit('socialError', 'No puedes aceptar tu propia solicitud.');
                 }
 
-                const status = accept ? 'accepted' : 'rejected';
-                console.log(`[SOCIAL] Response for ${friendshipId}: ${status}`);
-                const result = await updateFriendshipStatus(friendshipId, status);
+                if (accept) {
+                    const result = await updateFriendshipStatus(friendshipId, 'accepted');
+                    if (result.success) {
+                        socket.emit('socialSuccess', 'Amigo agregado.');
+                        const otherId = friendship.user_id_1 === userId ? friendship.user_id_2 : friendship.user_id_1;
+                        const otherSocketId = userSockets.get(otherId);
 
-                if (result.success) {
-                    socket.emit('socialSuccess', accept ? 'Amigo agregado.' : 'Solicitud rechazada.');
-                    const otherId = friendship.user_id_1 === userId ? friendship.user_id_2 : friendship.user_id_1;
-                    const otherSocketId = userSockets.get(otherId);
-                    socket.emit('friendsList', await getFriendships(userId));
-                    if (otherSocketId) io.to(otherSocketId).emit('friendsList', await getFriendships(otherId));
+                        // Notify both to refresh
+                        socket.emit('friendsList', await getFriendships(userId));
+                        if (otherSocketId) io.to(otherSocketId).emit('friendsList', await getFriendships(otherId));
+                    } else {
+                        socket.emit('socialError', 'Error al aceptar la solicitud.');
+                    }
                 } else {
-                    console.error(`[SOCIAL] Update error: ${result.error}`);
-                    socket.emit('socialError', 'Error al procesar respuesta.');
+                    // REJECTION or CANCELLATION: Delete the record
+                    const { error: delErr } = await supabase
+                        .from('friendships')
+                        .delete()
+                        .eq('id', friendshipId);
+
+                    if (!delErr) {
+                        socket.emit('socialSuccess', isSender ? 'Solicitud cancelada.' : 'Solicitud rechazada.');
+                        const otherId = friendship.user_id_1 === userId ? friendship.user_id_2 : friendship.user_id_1;
+                        const otherSocketId = userSockets.get(otherId);
+
+                        // Notify both to refresh
+                        socket.emit('friendsList', await getFriendships(userId));
+                        if (otherSocketId) io.to(otherSocketId).emit('friendsList', await getFriendships(otherId));
+                    } else {
+                        socket.emit('socialError', 'Error al procesar la solicitud.');
+                    }
                 }
             } catch (err) {
                 console.error(`[SOCIAL] Exception:`, err);

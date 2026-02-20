@@ -20,6 +20,9 @@ import { PlayerStatsModal } from '@/app/components/Modals/PlayerStatsModal';
 import { ErrorModal } from '@/app/components/Modals/ErrorModal';
 import { SuccessModal } from '@/app/components/Modals/SuccessModal';
 import { WithdrawModal } from '@/app/components/Modals/WithdrawModal';
+import { SocialPanel } from '@/app/components/Social/SocialPanel';
+import { BattleInviteModal } from '@/app/components/Social/BattleInviteModal';
+import { Users } from 'lucide-react';
 
 export default function Home() {
     const { user, isSignedIn } = useUser();
@@ -29,6 +32,9 @@ export default function Home() {
     const [statsUserId, setStatsUserId] = useState<string | null>(null);
     const [statsImageUrl, setStatsImageUrl] = useState<string | null>(null);
     const [showCollision, setShowCollision] = useState(false);
+    const [showSocial, setShowSocial] = useState(false);
+    const [incomingChallenge, setIncomingChallenge] = useState<any>(null);
+    const [socialPendingCount, setSocialPendingCount] = useState(0);
 
     const handleOpenStats = (userId: string, imageUrl?: string | null) => {
         setStatsUserId(userId);
@@ -64,7 +70,41 @@ export default function Home() {
         economyActions.checkBalanceForArena
     );
 
-    // 5. Background Music Logic
+    // 5. Social Listeners
+    useEffect(() => {
+        if (!socket) return;
+
+        const handleChallenge = (challenge: any) => {
+            setIncomingChallenge(challenge);
+            playSound('/sounds/sfx/notification.mp3');
+        };
+
+        socket.on('incomingChallenge', handleChallenge);
+        return () => { socket.off('incomingChallenge', handleChallenge); };
+    }, [socket]);
+
+    const handleChallengeFriend = (friendId: string, username: string) => {
+        // This is handled inside SocialPanel (emits 'challengeFriend')
+        // but we could add orchestration here if needed.
+    };
+
+    const acceptChallenge = () => {
+        if (socket && incomingChallenge) {
+            socket.emit('acceptChallenge', {
+                challengerId: incomingChallenge.fromId,
+                stakeTier: incomingChallenge.stakeTier,
+                mode: incomingChallenge.mode
+            });
+            setIncomingChallenge(null);
+            setShowSocial(false);
+        }
+    };
+
+    const declineChallenge = () => {
+        setIncomingChallenge(null);
+    };
+
+    // 6. Background Music Logic
     const { isMuted, musicVolume } = volumeStates;
 
     useEffect(() => {
@@ -172,6 +212,8 @@ export default function Home() {
                         (window as any).dataLayer.push({ event: 'leaderboard_open' });
                     }
                 }}
+                onOpenSocial={() => setShowSocial(!showSocial)}
+                socialPendingCount={socialPendingCount}
             />
 
             {/* Modals */}
@@ -301,6 +343,8 @@ export default function Home() {
                     onRematchResponse={gameActions.respondRematch}
                     showRewardAnim={gameData.reward.show}
                     rewardData={gameData.reward.data}
+                    onAddFriend={(username) => socket?.emit('sendFriendRequest', username)}
+                    opponentUsername={gameData.opponentUsername || undefined}
                     inactivityRefund={gameData.inactivityRefund}
                 />
             )}
@@ -329,6 +373,27 @@ export default function Home() {
                 onClose={economyActions.closeError}
                 onAction={economyState.errorModal.onAction}
                 actionLabel={economyState.errorModal.actionLabel}
+            />
+
+            {socket && (
+                <SocialPanel
+                    socket={socket}
+                    currentUserId={user?.id || ''}
+                    isOpen={showSocial}
+                    onClose={() => setShowSocial(false)}
+                    onPendingCountChange={setSocialPendingCount}
+                    onChallenge={(id, uname) => {
+                        // Logic for initiating a challenge is inside SocialPanel
+                    }}
+                />
+            )}
+            {console.log('[DEBUG_PAGE] SocialPanel mounted with socket:', !!socket, 'user.id:', user?.id)}
+
+            {/* Challenge Invitation Modal */}
+            <BattleInviteModal
+                challenge={incomingChallenge}
+                onAccept={acceptChallenge}
+                onDecline={declineChallenge}
             />
 
             <SuccessModal

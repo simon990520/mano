@@ -229,6 +229,11 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
 
         if (!isSignedIn || !user || !socket) {
             console.error('[ECONOMY] Purchase failed: User not signed in or socket not connected', { isSignedIn, user: !!user, socketConnected: socket?.connected });
+            setErrorModal({
+                isOpen: true,
+                title: 'INICIAR SESIÓN',
+                message: 'Debes iniciar sesión para realizar compras o reclamar recompensas.'
+            });
             return;
         }
 
@@ -268,6 +273,15 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
     };
 
     const handleClaimDaily = () => {
+        if (!isSignedIn || !user) {
+            setErrorModal({
+                isOpen: true,
+                title: 'RECOMPENSA',
+                message: 'Debes iniciar sesión para reclamar tu recompensa diaria.'
+            });
+            return;
+        }
+
         if (socket) {
             socket.emit('claimDailyReward');
             playSound('/sounds/sfx/click.mp3');

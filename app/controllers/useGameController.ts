@@ -25,6 +25,7 @@ export const useGameController = (
     const [choiceMade, setChoiceMade] = useState(false);
     const [opponentImageUrl, setOpponentImageUrl] = useState<string | null>(null);
     const [opponentId, setOpponentId] = useState<string | null>(null);
+    const [opponentUsername, setOpponentUsername] = useState<string | null>(null);
     const [isOpponentDisconnected, setIsOpponentDisconnected] = useState(false);
     const [reconnectTimer, setReconnectTimer] = useState(10);
     const [showCollision, setShowCollision] = useState<boolean>(false);
@@ -106,7 +107,12 @@ export const useGameController = (
             if (data.stakeTier) {
                 setCurrentMatchStake(data.stakeTier);
                 setSelectedStake(data.stakeTier); // SYNC: Persist stake for future matches
-                checkProfile();
+            }
+
+            if (data?.opponentUsername) {
+                setOpponentUsername(data.opponentUsername);
+            } else {
+                setOpponentUsername(null);
             }
 
             if (data.mode) {
@@ -271,7 +277,6 @@ export const useGameController = (
         socket.on('rematchAccepted', () => {
             console.log('[REMATCH] Accepted! Starting new game sequence...');
             setRematchStatus('¡Revancha aceptada! Iniciando nueva partida...');
-            if (checkProfile) checkProfile();
 
             setTimeout(() => {
                 console.log('[REMATCH] Resetting game state...');
@@ -532,6 +537,7 @@ export const useGameController = (
         gameWinner,
         opponentImageUrl,
         opponentId,
+        opponentUsername,
         isOpponentDisconnected,
         reconnectTimer,
         showCollision,
