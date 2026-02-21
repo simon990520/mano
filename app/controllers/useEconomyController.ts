@@ -228,7 +228,6 @@ export const useEconomyController = (isSignedIn: boolean | undefined, user: any,
         console.log(`[ECONOMY] handlePurchase triggered: ${type}, amount: ${amount}`);
 
         if (!isSignedIn || !user || !socket) {
-            console.error('[ECONOMY] Purchase failed: User not signed in or socket not connected', { isSignedIn, user: !!user, socketConnected: socket?.connected });
             setErrorModal({
                 isOpen: true,
                 title: 'INICIAR SESIÓN',

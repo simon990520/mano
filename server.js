@@ -299,7 +299,7 @@ app.prepare().then(() => {
         userSockets.set(userId, socket.id);
 
         socket.on('updateProfile', async (data) => {
-            let { username, birthDate, phone_number } = data;
+            let { username, birth_date, phone_number } = data;
 
             // SECURITY: Sanitize inputs
             username = sanitizeInput(username);
@@ -327,8 +327,9 @@ app.prepare().then(() => {
                     .eq('id', userId)
                     .maybeSingle();
 
-                // WELCOME BONUS: Triggered if they haven't set their birth_date yet (our onboarding completion metric)
-                const isNewOnboarding = !existing || !existing.birth_date;
+                // WELCOME BONUS: Triggered if they are missing BOTH birth_date and phone_number (our strict metric for a 'fresh' record)
+                // If they have any of these, they've already started the process or were already created.
+                const isNewOnboarding = !existing || (!existing.birth_date && !existing.phone_number);
 
                 // SECURITY: Double-check if bonus was already claimed during this session/request burst
                 const alreadyClaiming = bonusClaimLock.has(userId);
@@ -337,7 +338,7 @@ app.prepare().then(() => {
                     return socket.emit('profileUpdateError', 'Ya se está procesando tu registro.');
                 }
 
-                console.log(`[BONUS_LOG] Checking bonus for ${userId}. Has BirthDate: ${!!existing?.birth_date}, isNew: ${isNewOnboarding}`);
+                console.log(`[BONUS_LOG] Checking bonus for ${userId}. Has BirthDate: ${!!existing?.birth_date}, Has Phone: ${!!existing?.phone_number}, isNew: ${isNewOnboarding}`);
 
                 let finalCoins = (existing?.coins || 0);
                 let finalGems = (existing?.gems || 0);
@@ -355,7 +356,7 @@ app.prepare().then(() => {
                     .upsert({
                         id: userId,
                         username: username,
-                        birth_date: birthDate,
+                        birth_date: birth_date,
                         phone_number: phone_number,
                         coins: finalCoins,
                         gems: finalGems,

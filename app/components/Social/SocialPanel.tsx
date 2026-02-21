@@ -143,9 +143,6 @@ export const SocialPanel = ({ socket, currentUserId, isOpen, onClose, onChalleng
                         <Users className="text-yellow-500" size={20} />
                         <h2>Social</h2>
                     </div>
-                    <div style={{ fontSize: '9px', opacity: 0.5, marginLeft: 'auto', textAlign: 'right', marginRight: '10px' }}>
-                        ID: {currentUserId.slice(-6)} | I:{incomingRequests.length} O:{outgoingRequests.length}
-                    </div>
                     <button onClick={onClose} className="social-close-btn">
                         <X size={20} />
                     </button>
