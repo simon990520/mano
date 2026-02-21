@@ -22,6 +22,7 @@ import { SuccessModal } from '@/app/components/Modals/SuccessModal';
 import { WithdrawModal } from '@/app/components/Modals/WithdrawModal';
 import { SocialPanel } from '@/app/components/Social/SocialPanel';
 import { BattleInviteModal } from '@/app/components/Social/BattleInviteModal';
+import { SendChallengeModal } from '@/app/components/Social/SendChallengeModal';
 import { Users } from 'lucide-react';
 
 export default function Home() {
@@ -35,6 +36,7 @@ export default function Home() {
     const [showSocial, setShowSocial] = useState(false);
     const [incomingChallenge, setIncomingChallenge] = useState<any>(null);
     const [socialPendingCount, setSocialPendingCount] = useState(0);
+    const [challengeTarget, setChallengeTarget] = useState<{ id: string, username: string } | null>(null);
 
     const handleOpenStats = (userId: string, imageUrl?: string | null) => {
         setStatsUserId(userId);
@@ -84,8 +86,19 @@ export default function Home() {
     }, [socket]);
 
     const handleChallengeFriend = (friendId: string, username: string) => {
-        // This is handled inside SocialPanel (emits 'challengeFriend')
-        // but we could add orchestration here if needed.
+        setChallengeTarget({ id: friendId, username });
+        playSound('/sounds/sfx/click.mp3');
+    };
+
+    const handleSendBattleInvite = (type: 'casual' | 'ranked', amount: number) => {
+        if (!socket || !challengeTarget) return;
+        console.log('[SOCIAL] Sending challenge to:', challengeTarget.username, { type, amount });
+        socket.emit('challengeFriend', {
+            friendId: challengeTarget.id,
+            stakeTier: amount,
+            mode: type
+        });
+        setChallengeTarget(null);
     };
 
     const acceptChallenge = () => {
@@ -382,18 +395,28 @@ export default function Home() {
                     isOpen={showSocial}
                     onClose={() => setShowSocial(false)}
                     onPendingCountChange={setSocialPendingCount}
-                    onChallenge={(id, uname) => {
-                        // Logic for initiating a challenge is inside SocialPanel
-                    }}
+                    onChallenge={handleChallengeFriend}
+                    userBalance={{ coins: economyState.coins, gems: economyState.gems }}
                 />
             )}
             {console.log('[DEBUG_PAGE] SocialPanel mounted with socket:', !!socket, 'user.id:', user?.id)}
 
-            {/* Challenge Invitation Modal */}
+            {/* Challenge Invitation Modal (RECEIVED) */}
             <BattleInviteModal
                 challenge={incomingChallenge}
                 onAccept={acceptChallenge}
                 onDecline={declineChallenge}
+            />
+
+            <SendChallengeModal
+                isOpen={!!challengeTarget}
+                onClose={() => setChallengeTarget(null)}
+                onSendInvite={handleSendBattleInvite}
+                friendName={challengeTarget?.username || ''}
+                userBalance={{
+                    coins: Number(economyState.coins),
+                    gems: Number(economyState.gems)
+                }}
             />
 
             <SuccessModal

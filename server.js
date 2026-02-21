@@ -1169,12 +1169,25 @@ app.prepare().then(() => {
         });
 
         socket.on('challengeFriend', async ({ friendId, stakeTier, mode }) => {
-            console.log(`[SOCIAL_CHALLENGE] From ${userId} to ${friendId}, stake: ${stakeTier}, mode: ${mode}`);
+            const numericStake = Number(stakeTier);
+            console.log(`[SOCIAL_CHALLENGE_DEBUG] From: ${userId}, To: ${friendId}, Stake: ${numericStake}, Mode: ${mode}`);
+
             // Validate balance first
-            const { data: profile } = await supabase.from('profiles').select('coins, gems').eq('id', userId).single();
+            const { data: profile, error: profileError } = await supabase.from('profiles').select('coins, gems, username').eq('id', userId).single();
+
+            if (profileError) {
+                console.error(`[SOCIAL_CHALLENGE_DEBUG] Error fetching profile for ${userId}:`, profileError.message);
+                return socket.emit('matchError', `Error al verificar saldo: ${profileError.message}`);
+            }
+
             const currency = mode === 'casual' ? 'coins' : 'gems';
-            if (!profile || profile[currency] < stakeTier) {
-                return socket.emit('matchError', `Saldo insuficiente para apostar ${stakeTier} ${currency}.`);
+            const currentBalance = profile ? Number(profile[currency] || 0) : 0;
+
+            console.log(`[SOCIAL_CHALLENGE_DEBUG] User: ${profile?.username}, Balance: ${currentBalance} ${currency}, Required: ${numericStake}`);
+
+            if (!profile || currentBalance < numericStake) {
+                console.warn(`[SOCIAL_CHALLENGE_DEBUG] Insufficient funds for ${userId}. Have: ${currentBalance}, Need: ${numericStake}`);
+                return socket.emit('matchError', `Saldo insuficiente para apostar ${numericStake} ${currency}. (Tienes: ${currentBalance})`);
             }
 
             const targetSocketId = userSockets.get(friendId);
@@ -1183,8 +1196,9 @@ app.prepare().then(() => {
             // Send invite
             io.to(targetSocketId).emit('incomingChallenge', {
                 fromId: userId,
-                fromUsername: socket.username,
-                stakeTier,
+                fromUsername: profile.username || socket.username,
+                challengerImageUrl: null, // Column missing in DB, using null for now
+                stakeTier: numericStake,
                 mode
             });
             socket.emit('socialSuccess', 'Desafío enviado.');

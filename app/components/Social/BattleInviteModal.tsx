@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Swords, X, Trophy, Coins, Gem } from 'lucide-react';
+import { Swords, X, Trophy, Coins, Diamond } from 'lucide-react';
 
 interface BattleInviteModalProps {
     challenge: {
@@ -9,6 +9,7 @@ interface BattleInviteModalProps {
         fromUsername: string;
         stakeTier: number;
         mode: 'casual' | 'ranked';
+        challengerImageUrl?: string | null;
     } | null;
     onAccept: () => void;
     onDecline: () => void;
@@ -17,90 +18,344 @@ interface BattleInviteModalProps {
 export const BattleInviteModal = ({ challenge, onAccept, onDecline }: BattleInviteModalProps) => {
     const [timeLeft, setTimeLeft] = useState(15);
 
+    // Reset timer when a new challenge arrives
     useEffect(() => {
-        if (!challenge) {
+        if (challenge) {
             setTimeLeft(15);
-            return;
         }
+    }, [challenge]);
+
+    // Independent timer loop
+    useEffect(() => {
+        if (!challenge) return;
 
         const timer = setInterval(() => {
             setTimeLeft(prev => {
-                if (prev <= 1) {
-                    clearInterval(timer);
-                    onDecline();
-                    return 0;
-                }
-                return prev - 1;
+                const next = prev - 1;
+                return next < 0 ? 0 : next;
             });
         }, 1000);
 
         return () => clearInterval(timer);
     }, [challenge]);
 
+    // Safe side effect: call onDecline when time hits zero
+    useEffect(() => {
+        if (challenge && timeLeft === 0) {
+            onDecline();
+        }
+    }, [timeLeft, challenge, onDecline]);
+
     if (!challenge) return null;
 
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
-            <div className="w-full max-w-sm bg-[#0f172a] border border-yellow-500/30 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(234,179,8,0.2)] animate-in zoom-in-95 duration-300">
-                {/* Header/Banner */}
-                <div className="h-24 bg-gradient-to-br from-yellow-500/20 to-amber-600/20 flex items-center justify-center relative border-b border-white/10">
-                    <div className="absolute top-0 right-0 p-3">
-                        <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-yellow-500 font-bold text-xs ring-2 ring-yellow-500/30">
-                            {timeLeft}
-                        </div>
+        <div className="received-challenge-overlay">
+            <div className="received-challenge-container">
+                <div className="received-challenge-banner">
+                    <div className="timer-badge">
+                        {timeLeft}s
                     </div>
-                    <div className="p-4 bg-yellow-500 rounded-full shadow-lg shadow-yellow-500/20 animate-bounce-slow">
-                        <Swords className="w-8 h-8 text-black" />
+                    <div className="icon-glow">
+                        <Swords size={40} className="swords-icon" />
                     </div>
                 </div>
 
-                <div className="p-6 text-center">
-                    <h2 className="text-xl font-black text-white uppercase tracking-tight mb-1">¡Nuevo Desafío!</h2>
-                    <p className="text-white/60 text-sm mb-6">
-                        <span className="text-yellow-500 font-bold">@{challenge.fromUsername}</span> te ha retado a una batalla.
-                    </p>
+                <div className="received-challenge-body">
+                    <div className="challenger-info">
+                        <div className="challenger-avatar">
+                            {challenge.challengerImageUrl ? (
+                                <img src={challenge.challengerImageUrl} alt={challenge.fromUsername} />
+                            ) : (
+                                <div className="avatar-placeholder">
+                                    {challenge.fromUsername.charAt(0).toUpperCase()}
+                                </div>
+                            )}
+                        </div>
+                        <h2 className="invite-title">¡DESAFÍO RECIBIDO!</h2>
+                        <p className="invite-text">
+                            <span className="username">@{challenge.fromUsername}</span> quiere pelear contigo.
+                        </p>
+                    </div>
 
-                    <div className="grid grid-cols-2 gap-3 mb-8">
-                        <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-                            <div className="text-[10px] text-white/40 uppercase font-black mb-1">Apuesta</div>
-                            <div className="flex items-center justify-center gap-1">
-                                {challenge.mode === 'casual' ? <Coins className="w-4 h-4 text-yellow-500" /> : <Gem className="w-4 h-4 text-purple-500" />}
-                                <span className="text-white font-bold">{challenge.stakeTier}</span>
+                    <div className="challenge-details-grid">
+                        <div className="detail-item">
+                            <label>APUESTA</label>
+                            <div className="value">
+                                {challenge.mode === 'casual' ? (
+                                    <><Coins size={16} className="coin-icon" /> {challenge.stakeTier}</>
+                                ) : (
+                                    <><Diamond size={16} className="gem-icon" /> {challenge.stakeTier}</>
+                                )}
                             </div>
                         </div>
-                        <div className="bg-white/5 rounded-xl p-3 border border-white/10">
-                            <div className="text-[10px] text-white/40 uppercase font-black mb-1">Modo</div>
-                            <div className="flex items-center justify-center gap-1 text-white font-bold uppercase text-xs tracking-wider">
-                                <Trophy className={`w-4 h-4 ${challenge.mode === 'ranked' ? 'text-purple-500' : 'text-blue-500'}`} />
-                                {challenge.mode}
+                        <div className="detail-item">
+                            <label>MODO</label>
+                            <div className={`value mode-${challenge.mode}`}>
+                                <Trophy size={16} />
+                                {challenge.mode.toUpperCase()}
                             </div>
                         </div>
                     </div>
 
-                    <div className="flex flex-col gap-3">
-                        <button
-                            onClick={onAccept}
-                            className="w-full py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-black uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-yellow-500/20 active:scale-95"
-                        >
-                            ACEPTAR BATALLA
+                    <div className="received-challenge-actions">
+                        <button onClick={onAccept} className="accept-btn">
+                            ACEPTAR DUELO
                         </button>
-                        <button
-                            onClick={onDecline}
-                            className="w-full py-3 bg-white/5 hover:bg-white/10 text-white/60 font-bold uppercase tracking-widest rounded-xl transition-all active:scale-95"
-                        >
+                        <button onClick={onDecline} className="decline-btn">
                             IGNORAR
                         </button>
                     </div>
                 </div>
 
-                {/* Progress bar at bottom */}
-                <div className="h-1 w-full bg-white/5 overflow-hidden">
+                <div className="timer-progress-bar">
                     <div
-                        className="h-full bg-yellow-500 transition-all duration-1000 ease-linear"
+                        className="progress-fill"
                         style={{ width: `${(timeLeft / 15) * 100}%` }}
                     />
                 </div>
             </div>
+
+            <style jsx>{`
+                .received-challenge-overlay {
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(0, 0, 0, 0.7);
+                    backdrop-filter: blur(12px) saturate(160%);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10000;
+                    padding: 20px;
+                    animation: overlayFade 0.3s ease-out;
+                }
+
+                .received-challenge-container {
+                    background: linear-gradient(165deg, #1e293b 0%, #0f172a 100%);
+                    width: 100%;
+                    max-width: 400px;
+                    border-radius: 32px;
+                    border: 1px solid rgba(234, 179, 8, 0.3);
+                    box-shadow: 
+                        0 25px 50px -12px rgba(0, 0, 0, 0.9),
+                        0 0 40px rgba(234, 179, 8, 0.1);
+                    overflow: hidden;
+                    position: relative;
+                    animation: modalPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+                }
+
+                .received-challenge-banner {
+                    height: 120px;
+                    background: linear-gradient(135deg, rgba(234, 179, 8, 0.2) 0%, rgba(217, 119, 6, 0.1) 100%);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    position: relative;
+                    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                }
+
+                .timer-badge {
+                    position: absolute;
+                    top: 20px;
+                    right: 20px;
+                    background: rgba(255, 255, 255, 0.05);
+                    border: 1px solid rgba(234, 179, 8, 0.4);
+                    color: #fbbf24;
+                    padding: 4px 12px;
+                    border-radius: 99px;
+                    font-weight: 900;
+                    font-size: 0.8rem;
+                    box-shadow: 0 0 15px rgba(234, 179, 8, 0.2);
+                }
+
+                .icon-glow {
+                    width: 70px;
+                    height: 70px;
+                    background: #fbbf24;
+                    border-radius: 20px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 0 30px rgba(234, 179, 8, 0.4);
+                    transform: rotate(-10deg);
+                    animation: iconPulse 2s infinite ease-in-out;
+                }
+
+                .swords-icon {
+                    color: #0f172a;
+                }
+
+                .received-challenge-body {
+                    padding: 32px;
+                    text-align: center;
+                }
+
+                .challenger-avatar {
+                    width: 64px;
+                    height: 64px;
+                    border-radius: 50%;
+                    border: 2px solid #fbbf24;
+                    margin: 0 auto 16px;
+                    overflow: hidden;
+                    background: #1e293b;
+                    box-shadow: 0 0 20px rgba(234, 179, 8, 0.2);
+                }
+
+                .challenger-avatar img {
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                }
+
+                .avatar-placeholder {
+                    width: 100%;
+                    height: 100%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 1.5rem;
+                    font-weight: 900;
+                    color: #fbbf24;
+                }
+
+                .invite-title {
+                    font-size: 1.25rem;
+                    font-weight: 900;
+                    color: white;
+                    margin-bottom: 4px;
+                    letter-spacing: 1px;
+                }
+
+                .invite-text {
+                    color: rgba(255, 255, 255, 0.5);
+                    font-size: 0.95rem;
+                    margin-bottom: 24px;
+                }
+
+                .username {
+                    color: #fbbf24;
+                    font-weight: 800;
+                }
+
+                .challenge-details-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 12px;
+                    margin-bottom: 32px;
+                }
+
+                .detail-item {
+                    background: rgba(255, 255, 255, 0.03);
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    padding: 12px;
+                    border-radius: 16px;
+                }
+
+                .detail-item label {
+                    display: block;
+                    font-size: 0.65rem;
+                    font-weight: 900;
+                    color: rgba(255, 255, 255, 0.3);
+                    margin-bottom: 4px;
+                    letter-spacing: 1px;
+                }
+
+                .detail-item .value {
+                    font-weight: 900;
+                    color: white;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 6px;
+                    font-size: 1rem;
+                }
+
+                .gem-icon { color: #c084fc; }
+                .coin-icon { color: #fbbf24; }
+                
+                .mode-casual { color: #fbbf24 !important; }
+                .mode-ranked { color: #c084fc !important; }
+
+                .received-challenge-actions {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                }
+
+                .accept-btn {
+                    padding: 16px;
+                    border-radius: 16px;
+                    background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+                    color: #0f172a;
+                    border: none;
+                    font-weight: 900;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                    box-shadow: 0 10px 20px rgba(217, 119, 6, 0.2);
+                }
+
+                .accept-btn:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 15px 30px rgba(217, 119, 6, 0.3);
+                }
+
+                .decline-btn {
+                    padding: 12px;
+                    background: transparent;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    color: rgba(255, 255, 255, 0.4);
+                    border-radius: 16px;
+                    font-weight: 800;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    text-transform: uppercase;
+                    font-size: 0.8rem;
+                }
+
+                .decline-btn:hover {
+                    background: rgba(255, 255, 255, 0.05);
+                    color: white;
+                }
+
+                .timer-progress-bar {
+                    height: 4px;
+                    background: rgba(255, 255, 255, 0.05);
+                    width: 100%;
+                }
+
+                .progress-fill {
+                    height: 100%;
+                    background: #fbbf24;
+                    box-shadow: 0 0 10px rgba(234, 179, 8, 0.5);
+                    transition: width 1s linear;
+                }
+
+                @keyframes overlayFade {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+
+                @keyframes modalPop {
+                    from { transform: scale(0.9) translateY(20px); opacity: 0; }
+                    to { transform: scale(1) translateY(0); opacity: 1; }
+                }
+
+                @keyframes iconPulse {
+                    0%, 100% { transform: rotate(-10deg) scale(1); }
+                    50% { transform: rotate(5deg) scale(1.1); }
+                }
+
+                @media (max-width: 480px) {
+                    .received-challenge-container {
+                        max-width: 100%;
+                        border-radius: 24px;
+                    }
+                    .received-challenge-body {
+                        padding: 24px;
+                    }
+                }
+            `}</style>
         </div>
     );
 };
