@@ -12,6 +12,7 @@ interface SocialPanelProps {
     onClose: () => void;
     onChallenge: (friendId: string, username: string) => void;
     onPendingCountChange?: (count: number) => void;
+    userBalance: { coins: number; gems: number };
 }
 
 export const SocialPanel = ({ socket, currentUserId, isOpen, onClose, onChallenge, onPendingCountChange }: SocialPanelProps) => {
@@ -23,12 +24,13 @@ export const SocialPanel = ({ socket, currentUserId, isOpen, onClose, onChalleng
     const [isSearching, setIsSearching] = useState(false);
 
     useEffect(() => {
+        console.log('[SOCIAL_DEBUG] useEffect triggered', { hasSocket: !!socket, currentUserId });
         if (!socket || !currentUserId) {
-            console.log('[SOCIAL_CLIENT] Waiting for socket/user...', { hasSocket: !!socket, currentUserId });
             return;
         }
 
         const handleFriendsList = (list: Friendship[]) => {
+            console.log('[SOCIAL_DEBUG] handleFriendsList received:', list.length, 'friends');
             setFriends(list);
             setLoading(false);
 
