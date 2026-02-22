@@ -26,7 +26,7 @@ const { appSettings } = require('../utils/constants');
 async function handleIncomingWaMessage(msg) {
     const sender = msg.key.remoteJid;
     const body = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.quotedMessage?.conversation;
-    
+
     console.log(`[WA_BOT_TRACE] Incoming message from ${sender}. Body: ${body?.substring(0, 50)}...`);
 
     if (!body) {
@@ -142,6 +142,50 @@ function registerWhatsappHandlers(io, socket, userId, isAdmin) {
 
         console.log('[WA_BOT] Manual reconnect requested by admin');
         connectToWhatsApp(io);
+    });
+
+    // [ADMIN] Clear WhatsApp session and force fresh QR
+    socket.on('waResetSession', async () => {
+        if (!isAdmin(userId)) return;
+
+        console.log('[WA_BOT] 🗑️ Session RESET requested by admin. Clearing wa_auth_session...');
+
+        // 1. Close current socket connection gracefully
+        const { getSocket } = require('../services/whatsappService');
+        const waSock = getSocket();
+        if (waSock) {
+            try {
+                waSock.end(undefined);
+            } catch (e) {
+                console.warn('[WA_BOT] Could not gracefully close socket:', e.message);
+            }
+        }
+
+        // 2. Delete the session folder
+        const fs = require('fs');
+        const path = require('path');
+        const sessionPath = path.join(process.cwd(), 'wa_auth_session');
+
+        try {
+            if (fs.existsSync(sessionPath)) {
+                fs.rmSync(sessionPath, { recursive: true, force: true });
+                console.log('[WA_BOT] ✅ wa_auth_session folder deleted successfully.');
+            } else {
+                console.log('[WA_BOT] wa_auth_session folder does not exist, skipping delete.');
+            }
+        } catch (err) {
+            console.error('[WA_BOT] ❌ Error deleting session folder:', err.message);
+            return socket.emit('adminError', 'Error al eliminar la sesión: ' + err.message);
+        }
+
+        // 3. Wait briefly then reconnect to generate new QR
+        setTimeout(() => {
+            console.log('[WA_BOT] 🔄 Reconnecting with fresh session...');
+            connectToWhatsApp(io);
+        }, 1500);
+
+        socket.emit('adminSuccess', '✅ Sesión limpiada. Generando nuevo QR...');
+        io.to('admins').emit('waStatusUpdated', { status: 'disconnected', qr: null });
     });
 
     // [ADMIN] Get current app settings

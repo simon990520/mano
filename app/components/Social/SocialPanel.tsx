@@ -30,7 +30,6 @@ export const SocialPanel = ({ socket, currentUserId, isOpen, onClose, onChalleng
         }
 
         const handleFriendsList = (list: Friendship[]) => {
-            console.log('[SOCIAL_DEBUG] handleFriendsList received:', list.length, 'friends');
             setFriends(list);
             setLoading(false);
 

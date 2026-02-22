@@ -254,6 +254,17 @@ export default function AdminDashboard() {
         socketRef.current.emit('waReconnect');
     };
 
+    const handleWaResetSession = () => {
+        if (!socketRef.current) return;
+        const confirmed = window.confirm(
+            '⚠️ ¿Estás seguro de que quieres LIMPIAR la sesión de WhatsApp?\n\n' +
+            'Esto cerrará la sesión actual y borrará todos los archivos de autorización.\n' +
+            'Tendrás que escanear un nuevo código QR para reconectar el bot.'
+        );
+        if (!confirmed) return;
+        socketRef.current.emit('waResetSession');
+    };
+
     const handleSyncGroup = () => {
         if (!socketRef.current || !appSettingsState.whatsapp_group_id) return;
         setSyncStatus({ status: 'loading', message: 'Iniciando...', total: 0, current: 0 });
@@ -562,7 +573,10 @@ export default function AdminDashboard() {
                                     <div style={{ fontSize: '4rem', marginBottom: '16px' }}>✅</div>
                                     <h4 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 900 }}>¡BOT CONECTADO!</h4>
                                     <p style={{ color: colors.textMuted, marginTop: '12px' }}>El bot de WhatsApp está en línea y procesando mensajes.</p>
-                                    <button onClick={handleWaReconnect} style={{ marginTop: '24px', padding: '12px 24px', borderRadius: '12px', border: `2px solid ${colors.danger}`, background: 'transparent', color: colors.danger, fontWeight: 900, cursor: 'pointer' }}>FORZAR RECONEXIÓN</button>
+                                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '24px' }}>
+                                        <button onClick={handleWaReconnect} style={{ padding: '12px 24px', borderRadius: '12px', border: `2px solid ${colors.danger}`, background: 'transparent', color: colors.danger, fontWeight: 900, cursor: 'pointer' }}>FORZAR RECONEXIÓN</button>
+                                        <button onClick={handleWaResetSession} style={{ padding: '12px 24px', borderRadius: '12px', background: colors.danger, border: 'none', color: 'white', fontWeight: 900, cursor: 'pointer' }}>🗑️ LIMPIAR SESIÓN</button>
+                                    </div>
                                 </div>
                             ) : waQr ? (
                                 <div style={{ textAlign: 'center' }}>
@@ -575,8 +589,12 @@ export default function AdminDashboard() {
                                 <div style={{ textAlign: 'center' }}>
                                     <div style={{ fontSize: '3rem', marginBottom: '16px' }}>⏳</div>
                                     <h4 style={{ margin: 0, fontWeight: 900 }}>{waStatus === 'connecting' ? 'CONECTANDO...' : 'DESCONECTADO'}</h4>
-                                    <p style={{ color: colors.textMuted, marginTop: '12px' }}>{waStatus === 'connecting' ? 'Iniciando sesión de WhatsApp...' : 'Vuelve a vincular el dispositivo para activar el bot.'}</p>
-                                    <button onClick={handleWaReconnect} style={{ marginTop: '24px', padding: '16px 32px', borderRadius: '16px', background: colors.primary, color: 'white', border: 'none', fontWeight: 950, cursor: 'pointer' }}>CONECTAR BOT</button>
+                                    <h4 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 900 }}>DESCONECTADO</h4>
+                                    <p style={{ color: colors.textMuted, marginTop: '12px' }}>Cargando estado...</p>
+                                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '24px' }}>
+                                        <button onClick={handleWaReconnect} style={{ padding: '12px 24px', borderRadius: '12px', background: colors.primary, color: 'white', border: 'none', fontWeight: 900, cursor: 'pointer' }}>CONECTAR</button>
+                                        <button onClick={handleWaResetSession} style={{ padding: '12px 24px', borderRadius: '12px', background: colors.danger, border: 'none', color: 'white', fontWeight: 900, cursor: 'pointer' }}>🗑️ LIMPIAR SESIÓN</button>
+                                    </div>
                                 </div>
                             )}
                         </div>
