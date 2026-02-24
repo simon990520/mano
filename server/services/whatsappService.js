@@ -13,6 +13,8 @@ let waSock = null;
 let waQr = null;
 let waStatus = 'disconnected'; // disconnected, connecting, connected
 let waGroups = []; // Lista de grupos donde el bot es admin
+let reconnectTimeout = null;
+let isExplicitlyStopped = false;
 
 // ESM Dependencies (loaded dynamically)
 let makeWASocket, useMultiFileAuthState, DisconnectReason, Boom, pino;
@@ -54,7 +56,25 @@ async function connectToWhatsApp(io) {
     const { state, saveCreds } = await useMultiFileAuthState('wa_auth_session');
 
     waStatus = 'connecting';
+    isExplicitlyStopped = false;
     io.emit('waStatusUpdated', { status: waStatus });
+
+    // Clear any pending reconnect
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+    }
+
+    // Close existing socket if any
+    if (waSock) {
+        try {
+            waSock.ev.removeAllListeners('connection.update');
+            waSock.end(undefined);
+            waSock = null;
+        } catch (e) {
+            console.warn('[WA_SERVICE] Error closing old socket:', e.message);
+        }
+    }
 
     waSock = makeWASocket({
         auth: state,
@@ -83,9 +103,12 @@ async function connectToWhatsApp(io) {
             waQr = null;
             io.emit('waStatusUpdated', { status: waStatus, qr: waQr });
 
-            if (shouldReconnect) {
+            if (shouldReconnect && !isExplicitlyStopped) {
                 // Exponential backoff or simple delay to prevent tight loops
-                setTimeout(() => connectToWhatsApp(io), 3000);
+                reconnectTimeout = setTimeout(() => {
+                    reconnectTimeout = null;
+                    connectToWhatsApp(io);
+                }, 3000);
             }
         } else if (connection === 'open') {
             console.log('[WA_SERVICE] Connection opened successfully');
@@ -410,28 +433,49 @@ async function syncGroupParticipants(io, groupId) {
     } catch (error) {
         console.error('[WA_SYNC] Error:', error.message);
         io.emit('adminError', 'Error crítico en sincronización: ' + error.message);
-        io.emit('adminSyncStatus', { status: 'error', message: 'Fallo la sincronización' });
-    }
-}
+        /**
+         * Cierra la conexión de WhatsApp y previene reconexiones automáticas
+         */
+        async function stopWhatsApp() {
+            isExplicitlyStopped = true;
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
 
-// Getters para estado
-function getSocket() { return waSock; }
-function getStatus() { return waStatus; }
-function getQr() { return waQr; }
-function getGroups() { return waGroups; }
+            if (waSock) {
+                try {
+                    console.log('[WA_SERVICE] Stopping WhatsApp socket...');
+                    waSock.ev.removeAllListeners('connection.update');
+                    waSock.end(undefined);
+                    waSock = null;
+                } catch (e) {
+                    console.warn('[WA_SERVICE] Error in stopWhatsApp:', e.message);
+                }
+            }
+            waStatus = 'disconnected';
+            waQr = null;
+        }
+
+        // Getters para estado
+        function getSocket() { return waSock; }
+        function getStatus() { return waStatus; }
+        function getQr() { return waQr; }
+        function getGroups() { return waGroups; }
 
 
-module.exports = {
-    connectToWhatsApp,
-    sendHumanizedMessage,
-    sendMessageWithTyping,
-    fetchBotGroups,
-    addUserToGroup,
-    ensureUserInGroup, // New export
-    syncGroupParticipants,
-    loadWaDependencies,
-    getSocket,
-    getStatus,
-    getQr,
-    getGroups
-};
+        module.exports = {
+            connectToWhatsApp,
+            sendHumanizedMessage,
+            sendMessageWithTyping,
+            fetchBotGroups,
+            addUserToGroup,
+            ensureUserInGroup, // New export
+            syncGroupParticipants,
+            loadWaDependencies,
+            stopWhatsApp, // New export
+            getSocket,
+            getStatus,
+            getQr,
+            getGroups
+        };

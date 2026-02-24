@@ -150,16 +150,12 @@ function registerWhatsappHandlers(io, socket, userId, isAdmin) {
 
         console.log('[WA_BOT] 🗑️ Session RESET requested by admin. Clearing wa_auth_session...');
 
-        // 1. Close current socket connection gracefully
-        const { getSocket } = require('../services/whatsappService');
-        const waSock = getSocket();
-        if (waSock) {
-            try {
-                waSock.end(undefined);
-            } catch (e) {
-                console.warn('[WA_BOT] Could not gracefully close socket:', e.message);
-            }
-        }
+        // 1. Stop current socket and prevent auto-reconnect
+        const { stopWhatsApp } = require('../services/whatsappService');
+        await stopWhatsApp();
+
+        // 2. Clear state in admin panel
+        io.to('admins').emit('waStatusUpdated', { status: 'disconnected', qr: null });
 
         // 2. Delete the session folder
         const fs = require('fs');
@@ -168,6 +164,9 @@ function registerWhatsappHandlers(io, socket, userId, isAdmin) {
 
         try {
             if (fs.existsSync(sessionPath)) {
+                // Short sleep to ensure file handles are released by OS
+                await new Promise(r => setTimeout(r, 1000));
+
                 fs.rmSync(sessionPath, { recursive: true, force: true });
                 console.log('[WA_BOT] ✅ wa_auth_session folder deleted successfully.');
             } else {
@@ -180,12 +179,12 @@ function registerWhatsappHandlers(io, socket, userId, isAdmin) {
 
         // 3. Wait briefly then reconnect to generate new QR
         setTimeout(() => {
-            console.log('[WA_BOT] 🔄 Reconnecting with fresh session...');
+            console.log('[WA_BOT] 🔄 Starting fresh WhatsApp instance...');
+            const { connectToWhatsApp } = require('../services/whatsappService');
             connectToWhatsApp(io);
-        }, 1500);
+        }, 1000);
 
         socket.emit('adminSuccess', '✅ Sesión limpiada. Generando nuevo QR...');
-        io.to('admins').emit('waStatusUpdated', { status: 'disconnected', qr: null });
     });
 
     // [ADMIN] Get current app settings
