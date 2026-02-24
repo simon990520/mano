@@ -144,47 +144,49 @@ function registerWhatsappHandlers(io, socket, userId, isAdmin) {
         connectToWhatsApp(io);
     });
 
-    // [ADMIN] Clear WhatsApp session and force fresh QR
+    // [ADMIN] Clear WhatsApp session and force fresh QR (HARD RESET)
     socket.on('waResetSession', async () => {
         if (!isAdmin(userId)) return;
 
-        console.log('[WA_BOT] 🗑️ Session RESET requested by admin. Clearing wa_auth_session...');
+        console.log('[WA_BOT] 🚨 HARD SESSION RESET requested by admin.');
 
-        // 1. Stop current socket and prevent auto-reconnect
-        const { stopWhatsApp } = require('../services/whatsappService');
-        await stopWhatsApp();
-
-        // 2. Clear state in admin panel
-        io.to('admins').emit('waStatusUpdated', { status: 'disconnected', qr: null });
-
-        // 2. Delete the session folder
-        const fs = require('fs');
-        const path = require('path');
-        const sessionPath = path.join(process.cwd(), 'wa_auth_session');
+        const { stopWhatsApp, connectToWhatsApp } = require('../services/whatsappService');
 
         try {
+            // 1. Stop current socket and prevent auto-reconnect
+            await stopWhatsApp();
+            io.to('admins').emit('waStatusUpdated', { status: 'disconnected', qr: null });
+
+            // 2. EXTRA WAIT: Give VPS/OS 3 seconds to release all file handles
+            console.log('[WA_BOT] Waiting 3s for file handles to release...');
+            await new Promise(r => setTimeout(r, 3000));
+
+            // 3. Delete the session folder
+            const fs = require('fs');
+            const path = require('path');
+            const sessionPath = path.join(process.cwd(), 'wa_auth_session');
+
             if (fs.existsSync(sessionPath)) {
-                // Short sleep to ensure file handles are released by OS
-                await new Promise(r => setTimeout(r, 1000));
-
+                console.log('[WA_BOT] Deleting wa_auth_session folder...');
                 fs.rmSync(sessionPath, { recursive: true, force: true });
-                console.log('[WA_BOT] ✅ wa_auth_session folder deleted successfully.');
+                console.log('[WA_BOT] ✅ wa_auth_session deleted.');
             } else {
-                console.log('[WA_BOT] wa_auth_session folder does not exist, skipping delete.');
+                console.log('[WA_BOT] wa_auth_session already gone or not found.');
             }
-        } catch (err) {
-            console.error('[WA_BOT] ❌ Error deleting session folder:', err.message);
-            return socket.emit('adminError', 'Error al eliminar la sesión: ' + err.message);
-        }
 
-        // 3. Wait briefly then reconnect to generate new QR
-        setTimeout(() => {
-            console.log('[WA_BOT] 🔄 Starting fresh WhatsApp instance...');
-            const { connectToWhatsApp } = require('../services/whatsappService');
+            // 4. EXTRA WAIT: 2 more seconds before starting fresh
+            console.log('[WA_BOT] Waiting 2s before fresh start...');
+            await new Promise(r => setTimeout(r, 2000));
+
+            // 5. Start fresh
+            console.log('[WA_BOT] 🔄 Starting fresh instance now.');
             connectToWhatsApp(io);
-        }, 1000);
 
-        socket.emit('adminSuccess', '✅ Sesión limpiada. Generando nuevo QR...');
+            socket.emit('adminSuccess', '✅ Sesión limpiada con éxito. Generando nuevo QR...');
+        } catch (err) {
+            console.error('[WA_BOT] ❌ Error during HARD RESET:', err.message);
+            socket.emit('adminError', 'Error en reinicio maestro: ' + err.message);
+        }
     });
 
     // [ADMIN] Get current app settings

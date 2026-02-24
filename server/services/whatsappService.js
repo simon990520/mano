@@ -15,6 +15,7 @@ let waStatus = 'disconnected'; // disconnected, connecting, connected
 let waGroups = []; // Lista de grupos donde el bot es admin
 let reconnectTimeout = null;
 let isExplicitlyStopped = false;
+let isConnecting = false;
 
 // ESM Dependencies (loaded dynamically)
 let makeWASocket, useMultiFileAuthState, DisconnectReason, Boom, pino;
@@ -47,94 +48,110 @@ async function loadWaDependencies() {
  * @param {Object} io - Socket.io server instance
  */
 async function connectToWhatsApp(io) {
-    await loadWaDependencies();
-    if (!makeWASocket) {
-        console.error('[WA_SERVICE] Cannot connect: dependencies not loaded');
+    if (isConnecting) {
+        console.log('[WA_SERVICE] Connection attempt ignored: already connecting');
         return;
     }
 
-    const { state, saveCreds } = await useMultiFileAuthState('wa_auth_session');
-
-    waStatus = 'connecting';
-    isExplicitlyStopped = false;
-    io.emit('waStatusUpdated', { status: waStatus });
-
-    // Clear any pending reconnect
-    if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
-        reconnectTimeout = null;
-    }
-
-    // Close existing socket if any
-    if (waSock) {
-        try {
-            waSock.ev.removeAllListeners('connection.update');
-            waSock.end(undefined);
-            waSock = null;
-        } catch (e) {
-            console.warn('[WA_SERVICE] Error closing old socket:', e.message);
-        }
-    }
-
-    waSock = makeWASocket({
-        auth: state,
-        printQRInTerminal: false,
-        logger: pino({ level: 'silent' }),
-        browser: ['Piedra.fun', 'Chrome', '1.0.0']
-    });
-
-    waSock.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect, qr } = update;
-
-        if (qr) {
-            waQr = await QRCode.toDataURL(qr);
-            io.emit('waQrUpdated', { qr: waQr });
-            console.log('[WA_SERVICE] New QR generated');
+    try {
+        isConnecting = true;
+        await loadWaDependencies();
+        if (!makeWASocket) {
+            console.error('[WA_SERVICE] Cannot connect: dependencies not loaded');
+            isConnecting = false;
+            return;
         }
 
-        if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect.error instanceof Boom)
-                ? lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut
-                : true;
+        const { state, saveCreds } = await useMultiFileAuthState('wa_auth_session');
 
-            console.log(`[WA_SERVICE] Connection closed. Type: ${lastDisconnect.error?.output?.statusCode || 'Unknown'}. Reconnecting: ${shouldReconnect}`);
+        waStatus = 'connecting';
+        isExplicitlyStopped = false;
+        io.emit('waStatusUpdated', { status: waStatus });
 
-            waStatus = 'disconnected';
-            waQr = null;
-            io.emit('waStatusUpdated', { status: waStatus, qr: waQr });
+        // Clear any pending reconnect
+        if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
+            reconnectTimeout = null;
+        }
 
-            if (shouldReconnect && !isExplicitlyStopped) {
-                // Exponential backoff or simple delay to prevent tight loops
-                reconnectTimeout = setTimeout(() => {
-                    reconnectTimeout = null;
-                    connectToWhatsApp(io);
-                }, 3000);
+        // Close existing socket if any
+        if (waSock) {
+            try {
+                waSock.ev.removeAllListeners('connection.update');
+                waSock.end(undefined);
+                waSock = null;
+            } catch (e) {
+                console.warn('[WA_SERVICE] Error closing old socket:', e.message);
             }
-        } else if (connection === 'open') {
-            console.log('[WA_SERVICE] Connection opened successfully');
-            waStatus = 'connected';
-            waQr = null;
-            io.emit('waStatusUpdated', { status: waStatus, qr: waQr });
-
-            // Fetch groups when connected, but don't block
-            fetchBotGroups().catch(e => console.error('[WA_SERVICE] Failed to fetch groups on connect:', e.message));
         }
-    });
 
-    waSock.ev.on('messages.upsert', async (m) => {
-        if (m.type === 'notify') {
-            for (const msg of m.messages) {
-                if (!msg.key.fromMe) {
-                    const { handleIncomingWaMessage } = require('../controllers/whatsappController');
-                    await handleIncomingWaMessage(msg);
+        waSock = makeWASocket({
+            auth: state,
+            printQRInTerminal: false,
+            logger: pino({ level: 'silent' }),
+            browser: ['Piedra.fun', 'Chrome', '1.0.0']
+        });
+
+        isConnecting = false; // Reset guard after creation
+
+        waSock.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect, qr } = update;
+
+            if (qr) {
+                waQr = await QRCode.toDataURL(qr);
+                io.emit('waQrUpdated', { qr: waQr });
+                console.log('[WA_SERVICE] New QR generated');
+            }
+
+            if (connection === 'close') {
+                const shouldReconnect = (lastDisconnect.error instanceof Boom)
+                    ? lastDisconnect.error.output.statusCode !== DisconnectReason.loggedOut
+                    : true;
+
+                console.log(`[WA_SERVICE] Connection closed. Type: ${lastDisconnect.error?.output?.statusCode || 'Unknown'}. Reconnecting: ${shouldReconnect}`);
+
+                waStatus = 'disconnected';
+                waQr = null;
+                io.emit('waStatusUpdated', { status: waStatus, qr: waQr });
+
+                if (shouldReconnect && !isExplicitlyStopped) {
+                    // Exponential backoff or simple delay with jitter to prevent tight loops
+                    const backoffDelay = 3000 + Math.floor(Math.random() * 2000);
+                    reconnectTimeout = setTimeout(() => {
+                        reconnectTimeout = null;
+                        connectToWhatsApp(io);
+                    }, backoffDelay);
+                }
+            } else if (connection === 'open') {
+                console.log('[WA_SERVICE] Connection opened successfully');
+                waStatus = 'connected';
+                waQr = null;
+                io.emit('waStatusUpdated', { status: waStatus, qr: waQr });
+
+                // Fetch groups when connected, but don't block
+                fetchBotGroups().catch(e => console.error('[WA_SERVICE] Failed to fetch groups on connect:', e.message));
+            }
+        });
+
+        waSock.ev.on('messages.upsert', async (m) => {
+            if (m.type === 'notify') {
+                for (const msg of m.messages) {
+                    if (!msg.key.fromMe) {
+                        const { handleIncomingWaMessage } = require('../controllers/whatsappController');
+                        await handleIncomingWaMessage(msg);
+                    }
                 }
             }
-        }
-    });
+        });
 
-    waSock.ev.on('creds.update', saveCreds);
+        waSock.ev.on('creds.update', saveCreds);
 
-    return waSock;
+        return waSock;
+    } catch (err) {
+        console.error('[WA_SERVICE] Connection error:', err.message);
+        isConnecting = false;
+        throw err;
+    }
 }
 
 /**
@@ -438,10 +455,13 @@ async function syncGroupParticipants(io, groupId) {
 }
 
 /**
- * Cierra la conexión de WhatsApp y previene reconexiones automáticas
+ * Cierra la conexión de WhatsApp de forma agresiva y previene reconexiones
  */
 async function stopWhatsApp() {
+    console.log('[WA_SERVICE] Executing Hard Stop...');
     isExplicitlyStopped = true;
+    isConnecting = false; // Cancel any pending connection state
+
     if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
         reconnectTimeout = null;
@@ -449,16 +469,24 @@ async function stopWhatsApp() {
 
     if (waSock) {
         try {
-            console.log('[WA_SERVICE] Stopping WhatsApp socket...');
+            // Remove all listeners to prevent triggered reconnections during shutdown
             waSock.ev.removeAllListeners('connection.update');
+            waSock.ev.removeAllListeners('creds.update');
+            waSock.ev.removeAllListeners('messages.upsert');
+
             waSock.end(undefined);
             waSock = null;
+            console.log('[WA_SERVICE] Socket ended and cleared.');
         } catch (e) {
-            console.warn('[WA_SERVICE] Error in stopWhatsApp:', e.message);
+            console.warn('[WA_SERVICE] Warning during stopWhatsApp:', e.message);
         }
     }
+
     waStatus = 'disconnected';
     waQr = null;
+
+    // Final safety sleep to ensure OS handles are released
+    await new Promise(r => setTimeout(r, 1000));
 }
 
 // Getters para estado
