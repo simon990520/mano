@@ -433,49 +433,53 @@ async function syncGroupParticipants(io, groupId) {
     } catch (error) {
         console.error('[WA_SYNC] Error:', error.message);
         io.emit('adminError', 'Error crítico en sincronización: ' + error.message);
-        /**
-         * Cierra la conexión de WhatsApp y previene reconexiones automáticas
-         */
-        async function stopWhatsApp() {
-            isExplicitlyStopped = true;
-            if (reconnectTimeout) {
-                clearTimeout(reconnectTimeout);
-                reconnectTimeout = null;
-            }
+        io.emit('adminSyncStatus', { status: 'error', message: 'Fallo la sincronización' });
+    }
+}
 
-            if (waSock) {
-                try {
-                    console.log('[WA_SERVICE] Stopping WhatsApp socket...');
-                    waSock.ev.removeAllListeners('connection.update');
-                    waSock.end(undefined);
-                    waSock = null;
-                } catch (e) {
-                    console.warn('[WA_SERVICE] Error in stopWhatsApp:', e.message);
-                }
-            }
-            waStatus = 'disconnected';
-            waQr = null;
+/**
+ * Cierra la conexión de WhatsApp y previene reconexiones automáticas
+ */
+async function stopWhatsApp() {
+    isExplicitlyStopped = true;
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+    }
+
+    if (waSock) {
+        try {
+            console.log('[WA_SERVICE] Stopping WhatsApp socket...');
+            waSock.ev.removeAllListeners('connection.update');
+            waSock.end(undefined);
+            waSock = null;
+        } catch (e) {
+            console.warn('[WA_SERVICE] Error in stopWhatsApp:', e.message);
         }
+    }
+    waStatus = 'disconnected';
+    waQr = null;
+}
 
-        // Getters para estado
-        function getSocket() { return waSock; }
-        function getStatus() { return waStatus; }
-        function getQr() { return waQr; }
-        function getGroups() { return waGroups; }
+// Getters para estado
+function getSocket() { return waSock; }
+function getStatus() { return waStatus; }
+function getQr() { return waQr; }
+function getGroups() { return waGroups; }
 
 
-        module.exports = {
-            connectToWhatsApp,
-            sendHumanizedMessage,
-            sendMessageWithTyping,
-            fetchBotGroups,
-            addUserToGroup,
-            ensureUserInGroup, // New export
-            syncGroupParticipants,
-            loadWaDependencies,
-            stopWhatsApp, // New export
-            getSocket,
-            getStatus,
-            getQr,
-            getGroups
-        };
+module.exports = {
+    connectToWhatsApp,
+    sendHumanizedMessage,
+    sendMessageWithTyping,
+    fetchBotGroups,
+    addUserToGroup,
+    ensureUserInGroup, // New export
+    syncGroupParticipants,
+    loadWaDependencies,
+    stopWhatsApp, // New export
+    getSocket,
+    getStatus,
+    getQr,
+    getGroups
+};
